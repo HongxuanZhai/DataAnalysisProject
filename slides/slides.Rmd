@@ -1,0 +1,622 @@
+---
+title: "Distribution Fitting and Predictions"
+subtitle: "on Heavy Tailed Data in Audit"
+author: Andy Zhai
+output: 
+  beamer_presentation:
+    theme: "Madrid"
+classoption: t
+header-includes:
+- \usepackage{physics}
+- \usepackage{amsmath}
+- \usepackage{tikz}
+- \usepackage{pgfplots}
+- \usepackage{mathdots}
+- \usepackage{yhmath}
+- \usepackage{cancel}
+- \usepackage{color}
+- \usepackage{caption}
+- \usepackage{siunitx}
+- \usepackage{array}
+- \usepackage{multirow}
+- \usepackage{amssymb}
+- \usepackage{gensymb}
+- \usepackage{tabularx}
+- \usepackage{booktabs}
+- \usepackage{url}
+- \usetikzlibrary{fadings}
+- \usetikzlibrary{patterns}
+- \usetikzlibrary{shadows.blur}
+- \usetikzlibrary{shapes}
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, fig.align = "center")
+```
+
+
+## Financial Audit
+
+- an independent examination of financial information of an entity[^aud]
+- an auditor is trying to understand a company's business and provides his or her own opinion on the financial statements
+
+### an audit table
+
+- Are the claimed value reasonable?
+\only<1>{
+\begin{table}
+\begin{tabular}{l | c | c}
+item & claimed value(\$) \\
+\hline \hline
+a sketch pencil &  $1$ \\
+a spiral notebook &  $5$ \\
+an all-in-ones desktop &  $1,000$ \\
+$\vdots$ & $\vdots$ \\
+a laptop &  $20,000$\\
+a warehouse & $400,000$
+\end{tabular}
+\end{table}}
+
+\only<2>{\begin{table}
+\begin{tabular}{l | c | c}
+item & claimed value(\$) & true value(\$) \\
+\hline \hline
+a sketch pencil &  $1$ & $1$\\
+a spiral notebook &  $5$ & $5$\\
+an all-in-ones desktop &  $1,000$ & $990$\\
+$\vdots$ & $\vdots$ & $\vdots$ \\
+a laptop &  $\textcolor{red}{20,000}$ & $\textcolor{blue}{2,000}$\\
+a warehouse & $400,000$ & $400,000$
+\end{tabular}
+\end{table}
+
+}
+
+[^aud]: https://en.wikipedia.org/wiki/Audit
+
+## Financial Audit
+
+\begin{table}
+\begin{tabular}{l | c | c}
+transaction id & true value $X$(\$) & claimed value $Y$(\$) \\
+\hline \hline
+1 & $x_1 = 1$ & $y_1 = 1$ \\
+2 & $x_2 = 5$ & $y_2 = 5$ \\
+3 & $x_3 = 1,000$ & $y_3 = 9,000$ \\
+$\vdots$  & $\vdots$  & $\vdots$  \\
+n & $x_n$ & $y_n$
+\end{tabular}
+\end{table}
+
+
+* One task: Given a table filled with claimed values, is that table successfully tell the "truth"?
+
+* Assume each $X_i \leq Y_i$ (overstatement),
+$$error = \sum_{i=1}^{n}(Y_i - X_i).$$
+
+* If $\sum_{i=1}^{n} Y_i$ is not that different from $\sum_{i=1}^{n} X_i$, an auditor will conclude that the transaction record is "safe".
+
+
+<!-- ## Financial Audit  -->
+
+<!-- \begin{table} -->
+<!-- \begin{tabular}{l | c | c} -->
+<!-- transaction id & true value $X$(\$) & claimed value $Y$(\$) \\ -->
+<!-- \hline \hline -->
+<!-- 1 & $x_1 = 1$ & $y_1 = 1$ \\ -->
+<!-- 2 & $x_2 = 5$ & $y_2 = 5$ \\ -->
+<!-- 3 & $x_3 = 1,000$ & $y_3 = 9,000$ \\ -->
+<!-- $\vdots$  & $\vdots$  & $\vdots$  \\ -->
+<!-- n & $x_n$ & $y_n$ -->
+<!-- \end{tabular} -->
+<!-- \end{table} -->
+
+
+<!-- * Examining every entry of the table when $n$ is very large will be time-consuming. -->
+
+<!-- * It is reasonable that one only check a part of the table and develope a procedure to justify whether that table is "safe". -->
+
+
+## Model an Audit Process (the big picture)
+
+\vspace{10pt}
+
+* Model the true value $X$ based on samples of $X$.
+
+\vspace{6pt}
+* Model the claimed value $Y|X$.
+
+  * In the modeling phase, both $X$ and $Y$'s are observables.
+
+\vspace{6pt}
+* Make inference on $X|Y$.
+
+
+### The auditor's work
+
+* Once the auditor has the model of $P(X)$ and $P(Y|X)$, and given a set of claimed values $\tilde{Y}$ ($X$ is not observable to the auditor), he or she can use $\tilde{Y}$ along with $X|Y$ to update their opinion about true values $X$ and then make inference on the error.
+
+<!-- ```{r diag} -->
+<!-- DiagrammeR::grViz(" -->
+<!--   digraph graph2 { -->
+
+<!--   graph [layout = dot, rankdir = LR] -->
+
+<!--   # node definitions with substituted label text -->
+<!--   node [shape = oval] -->
+<!--   a [label= '&#955;'] -->
+<!--   b [label = 'X'] -->
+<!--   c [label = 'Y'] -->
+
+<!--   a -> b -> c  -->
+<!--   } -->
+<!--   ",  -->
+<!--   height = 30) -->
+<!-- ``` -->
+
+<!-- \vspace{0.3cm} -->
+
+<!-- * data generating process: $\lambda \rightarrow X$; $P(\lambda)$ and $P(X | \lambda)$    -->
+
+<!-- * data contaminating process: $X \rightarrow Y$; $P(Y|X)$ -->
+
+<!-- ### This project focuses on:    -->
+<!-- - modelling data generating process $\lambda \rightarrow X$ ($P(\lambda)$ and $P(X | \lambda)$) with inferential target $\sum_i X_i$. -->
+
+<!-- ```{r diag1} -->
+<!-- DiagrammeR::grViz(" -->
+<!--   digraph graph2 { -->
+
+<!--   graph [layout = dot, rankdir = LR] -->
+
+<!--   # node definitions with substituted label text -->
+<!--   node [shape = oval] -->
+<!--   a [label= '&#955;'] -->
+<!--   b [label = 'X'] -->
+
+<!--   a -> b  -->
+<!--   } -->
+<!--   ",  -->
+<!--   height = 30) -->
+<!-- ``` -->
+
+## Objective in This Project
+
+* Model the true value $X$ by a bayesian approach.
+
+ * $\lambda$: a vector of parameters.
+ * $P(X|\lambda)$: a statistical model for data.
+ * $\sum X$: inferencial target.
+
+<!-- ```{r diag2} -->
+<!-- DiagrammeR::grViz(" -->
+<!--   digraph graph2 { -->
+
+<!--   graph [layout = dot, rankdir = LR] -->
+
+<!--   # node definitions with substituted label text -->
+<!--   node [shape = oval] -->
+<!--   a [label= '&#955;'] -->
+<!--   b [label = 'X'] -->
+
+<!--   a -> b  -->
+<!--   } -->
+<!--   ",  -->
+<!--   height = 30) -->
+<!-- ``` -->
+
+
+
+### Steps
+
+* determine priors for $P(\lambda)$ and models for $P(X | \lambda)$;
+
+\vspace{3pt}
+
+* estimate the density of $X$ by $f(\tilde{x}|X) = \int f(\tilde{x}|\lambda)f(\lambda|X)d\lambda$; 
+
+* get posterior predictions of $\sum \tilde{X}$ from $f(\tilde{x}|X)$;
+
+\vspace{3pt}
+
+* check prediction performance.
+
+  
+## Challenge in Modelling the Audit Data
+
+### Audit data are imbalanced and heavy-tailed.
+
+\begin{figure}
+  \centering
+  \includegraphics[scale = 0.55]{qqplot_itself-1.png}
+  \\
+\end{figure}
+
+<!-- We have relatively few data with large values, which greatly influence our inferential target $\sum X_i$. -->
+
+## Challenge in Modelling the Audit Data
+
+* Consider classical gaussian kernel density estimation
+$$\hat{f}_h(x) = \frac{1}{n} \sum_{i =1}^{n}\phi(\frac{x-x_i}{h})$$
+- single bandwidth $h$: not sufficient for introducing local adaptiveness, especially to the right tail (multiple bandwidths).
+
+\begin{figure}
+  \centering
+  \includegraphics[scale = 0.31]{kdeqq_log.png}
+  \\
+\end{figure}
+
+## Priors and Models
+\vspace{75pt}
+
+* $P(X|\lambda)$: lognormal mixture model
+
+\vspace{5pt}
+
+* $P(\lambda)$: dirichlet process
+
+\vspace{5pt}
+
+* In combined, we have a dirichlet process (DP) mixture model.
+
+## $P(X|\lambda)$: the lognormal mixture model
+
+Let $X$ denote the sample from population let $Z = log(X)$. A normal mixture model for $Z$ can be written as
+$$f(z| \mathbf{\pi}, \mathbf{\theta}) = \sum_{i = 1}^{m} \pi_{i} N(z|\theta_{i}),$$
+where $\theta_i = (\mu_i, \sigma_i^2 = \phi_{i}^{-1})$ and $m$ is total number of mixture's components.
+
+
+\vspace{5pt}
+
+* $\sigma_i^2$:component-specific bandwidth.
+
+\vspace{5pt}
+
+* $\lambda$ :(\boldmath$\theta$, \boldmath$\pi$).
+
+## Determine $P(\lambda) =$ $P$(\boldmath$\theta$, \boldmath$\pi$)
+
+### Determine $P$(\boldmath$\pi$)
+
+\tikzset{every picture/.style={line width=0.75pt}}
+
+\begin{center}
+
+\begin{tikzpicture}[x=0.75pt,y=0.75pt,yscale=-1,xscale=1]
+%uncomment if require: \path (0,300); %set diagram left start at 0, and has height of 300
+
+%Straight Lines [id:da17705374275993746] 
+\draw    (100,111) -- (400.5,109.69) ;
+%Shape: Brace [id:dp19877417711789946] 
+\draw   (100,120) .. controls (100.02,124.67) and (102.36,126.99) .. (107.03,126.97) -- (240.28,126.39) .. controls (246.95,126.36) and (250.29,128.67) .. (250.31,133.34) .. controls (250.29,128.67) and (253.61,126.33) .. (260.28,126.3)(257.28,126.31) -- (393.53,125.72) .. controls (398.2,125.7) and (400.52,123.36) .. (400.5,118.69) ;
+%Straight Lines [id:da33987168327834905] 
+\draw    (100.5,100.69) -- (100,111) ;
+%Straight Lines [id:da6277680757747284] 
+\draw    (400.5,109.69) -- (400.5,100.69) ;
+%Straight Lines [id:da2251953425023585] 
+\draw    (149.5,111.69) -- (149.5,101.69) ;
+%Straight Lines [id:da38798516082055534] 
+\draw    (220.5,111.69) -- (220.5,101.69) ;
+%Straight Lines [id:da045164791945094596] 
+\draw    (333.5,110.69) -- (333.5,100.69) ;
+%Straight Lines [id:da5509933214908176] 
+\draw    (113.5,77.69) -- (123.67,99.87) ;
+\draw [shift={(124.5,101.69)}, rotate = 245.38] [color={rgb, 255:red, 0; green, 0; blue, 0 }  ][line width=0.75]    (10.93,-3.29) .. controls (6.95,-1.4) and (3.31,-0.3) .. (0,0) .. controls (3.31,0.3) and (6.95,1.4) .. (10.93,3.29)   ;
+%Straight Lines [id:da452449213363352] 
+\draw    (175.5,76.69) -- (183.77,97.83) ;
+\draw [shift={(184.5,99.69)}, rotate = 248.63] [color={rgb, 255:red, 0; green, 0; blue, 0 }  ][line width=0.75]    (10.93,-3.29) .. controls (6.95,-1.4) and (3.31,-0.3) .. (0,0) .. controls (3.31,0.3) and (6.95,1.4) .. (10.93,3.29)   ;
+%Straight Lines [id:da769863624578252] 
+\draw    (300.5,80.69) -- (284.83,98.2) ;
+\draw [shift={(283.5,99.69)}, rotate = 311.82] [color={rgb, 255:red, 0; green, 0; blue, 0 }  ][line width=0.75]    (10.93,-3.29) .. controls (6.95,-1.4) and (3.31,-0.3) .. (0,0) .. controls (3.31,0.3) and (6.95,1.4) .. (10.93,3.29)   ;
+
+% Text Node
+\draw (189,135) node [anchor=north west][inner sep=0.75pt]   [align=left] {a unit length stick};
+% Text Node
+\draw (67,52) node [anchor=north west][inner sep=0.75pt]   [align=left] {$\displaystyle \pi _{1} =V_{1}$};
+% Text Node
+\draw (141,52) node [anchor=north west][inner sep=0.75pt]   [align=left] {$\displaystyle \pi _{2} =V_{2}( 1-V_{1})$};
+% Text Node
+\draw (279,53) node [anchor=north west][inner sep=0.75pt]   [align=left] {$\displaystyle \pi _{3} =V_{3}( 1-V_{1})( 1-V_{2})$};
+% Text Node
+\draw (347,91) node [anchor=north west][inner sep=0.75pt]   [align=left] {$\displaystyle \cdot \cdot \cdot \cdot \cdot \cdot $};
+
+
+\end{tikzpicture}
+
+\end{center}
+
+- $V_i \sim Beta(1, \alpha)$
+\vspace{8pt}
+- stochastically decreasing sequence of probabilities $\pi$'s
+\vspace{8pt}
+- after some step $s$, $\pi_j's$, $j \geq s$ negligible
+
+## Determine $P$(\boldmath$\theta$ | \boldmath$\pi$)
+
+* laten variable \boldmath$K$; each $k_i \in \{1,...,N\}$ indexes a component in the mixture model,
+$$Z_i | \theta, K \stackrel{ind}{\sim} N(\theta_{k_i}), \quad where \ \theta_{K_i} = (\mu_{k_i}, \sigma_{k_i}^2 =\phi_{k_i}^{-1})$$
+
+### Two Choices of $P$(\boldmath$\theta$ | \boldmath$\pi$)
+
+\begin{columns}
+\column{0.5\textwidth}
+Normal-gamma (constrained) prior:
+{\small $\mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i} \sim N(\mu_0, (\kappa_0 \phi_{k_i})^{-1})$}
+{\small $\phi_{k_i} | v_0, ss_{0} \sim gamma({v_0}, {ss_0})$}
+\column{0.5\textwidth}
+T-betaprime (flexible) prior:
+{\small $\mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i}, df \sim T(\mu_0, (\kappa_0 \phi_{k_i})^{-1}, df)$}
+{\small $\phi_{k_i} | v_0, ss_{0}, v_1 \sim bp({v_0}, v_{1}, {ss_0}^{-1})$}
+$$\Updownarrow$$
+{\small $\mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i}, r_{k_i} \sim N(\mu_0, (\kappa_0 \phi_{k_i} r_{k_i})^{-1})$}
+{\small $r_{k_i} \sim gamma(\frac{df}{2}, \frac{df}{2})$}
+{\small $\phi_{k_i} | v_0, ss_{0}, h_{k_i} \sim gamma({v_0}, {ss_0}h_{k_i})$}
+{\small $h_{k_i} | v_1 \sim gamma(v_1, v_1)$}
+
+\end{columns}
+
+<!-- \begin{equation*} -->
+<!-- \begin{aligned}[c] -->
+<!-- \mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i} \sim N(\mu_0, (\kappa_0 \phi_{k_i})^{-1}) \\ -->
+<!-- \phi_{k_i} | v_0, ss_{0} \sim gamma({v_0}, {ss_0}) -->
+<!-- \qquad \qquad \qquad -->
+<!-- \begin{aligned}[c] -->
+<!-- \mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i}, df \sim T(\mu_0, (\kappa_0 \phi_{k_i})^{-1}, df) \\ -->
+<!-- \phi_{k_i} | v_0, ss_{0}, v_1 \sim bp({v_0}, v_{1}, {ss_0}^{-1}) \\ -->
+<!-- \mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i}, r_{k_i} \sim N(\mu_0, (\kappa_0 \phi_{k_i} r_{k_i})^{-1}) \\ -->
+<!-- r_{k_i} \sim gamma(\frac{df}{2}, \frac{df}{2}) \\ -->
+<!-- \phi_{k_i} | v_0, ss_{0}, h_{k_i} \sim gamma({v_0}, {ss_0}h_{k_i}) \\ -->
+<!-- h_{k_i} | v_1 \sim gamma(v_1, v_1) \\ -->
+<!-- \end{aligned} -->
+<!-- \end{equation*} -->
+
+<!-- \begin{equation*} -->
+<!-- \begin{aligned}[t] -->
+<!-- \mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i} \sim N(\mu_0, (\kappa_0 \phi_{k_i})^{-1}) \\ -->
+<!--  \phi_{k_i} | v_0, ss_{0} \sim gamma({v_0}, {ss_0}) \\ -->
+<!-- \end{aligned} -->
+<!-- \qquad  -->
+<!-- \begin{aligned}[t] -->
+<!-- {\small \mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i}, df \sim T(\mu_0, (\kappa_0 \phi_{k_i})^{-1}, df)}\\  -->
+<!-- \end{aligned} -->
+<!-- \end{equation*} -->
+
+
+## A closer look at two priors of $P$(\boldmath$\theta$ | \boldmath$\pi$)
+
+\begin{figure}
+  \centering
+  \includegraphics[scale = 0.30]{table_screenshot.png}
+  \\
+\end{figure}
+
+* shares the same prior mean for $\mu_{k_i}$ and $\sigma_{k_i}^2$
+
+* flexible prior having larger prior variance in general
+
+* flexible prior having heavier tail
+
+## Data-based simulation study
+
+### experiment:
+
+* Given 500 data from the population, we want to use those data to approximate nonparametric bayesian density estimates under different priors and predict the sum of the "holdout" population, then check the prediction performance.
+
+### implementation
+
+* Blocked gibbs sampling method for stick-breaking prior (Ishwaran and James 2001)[^SB] with total number of iterations for each
+MCMC chain to be 100,000.
+
+### comparisions:
+
+* density estimation: QQ plots; KS goodness of fit test
+
+* prediction: root mean square logarithmic error (RMSLE) 
+
+[^SB]: http://people.ee.duke.edu/~lcarin/Yuting3.3.06.pdf
+
+## Data-based simulation study: choosing prior's hyperparameter
+
+\begin{columns}
+\column{0.5\textwidth}
+Normal-gamma (constrained) prior:
+{\small $$\mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i} \sim N(\mu_0, (\kappa_0 \phi_{k_i})^{-1})$$}
+{\small $$\phi_{k_i} | v_0, ss_{0} \sim gamma({v_0}, {ss_0})$$}
+\column{0.5\textwidth}
+T-betaprime (flexible) prior:
+{\small $$\mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i}, df \sim T(\mu_0, (\kappa_0 \phi_{k_i})^{-1}, df)$$}
+{\small $$\phi_{k_i} | v_0, ss_{0}, v_1 \sim bp({v_0}, v_{1}, {ss_0}^{-1})$$}
+\end{columns}
+
+$$\mu_0 \sim N(a, \sigma_0^2), \kappa_0 \sim gamma(g_1, g_2)$$
+$${\pi} \sim {SB}(1,\alpha),{K} \sim Multi({\pi})$$
+$$\alpha \sim gamma(c, d)$$
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ |c|c|c|c|c|c|c| } 
+\hline
+Parameter & $(v_0,ss_0)$ & $(g_1, g_2)$ & $(a, \sigma_0^2)$ &  $(c,d)$ & \textcolor{red} {$df$} & \textcolor{red} {$v_1$}\\
+\hline
+\multirow{3}{4em}{Value} & (2.13, 0.6) & (1, 4) & (0, 100) & (3, 0.35) & \textcolor{red} 3 &\textcolor{red} {1.5} \\ 
+& (4, 1.75) & (0.5, 2) &  & (11, 1) & \textcolor{red} {12} & \textcolor{red} 3\\ 
+& (10, 6.2) &  &  &  & \textcolor{red} {22} &\\ 
+\hline
+\end{tabular}
+\caption{Design table for hyperparameters.}
+\end{table}
+
+
+## Posterior predictions extrapolate too much! 
+
+\begin{figure}
+  \centering
+  \includegraphics[scale = 0.60]{untrun-1.png}
+  \\
+\end{figure}
+
+## Posterior predictions extrapolate too much!
+
+\begin{figure}
+  \centering
+  \includegraphics[scale = 0.50]{untrun_sampling-1.png}
+  \\
+\end{figure}
+
+* By the assumption of overstatement, truncated posterior predictions are made from the bayesian density estimates.
+
+
+## Posterior predictions
+
+```{r t1, out.width='70%', echo=FALSE}
+load("~/Projects/DAfinal/untrunc.Rdata")
+library(ggplot2)
+acq.data.temp <- read.csv("~/Projects/DAfinal/acquisition.csv", header = FALSE, sep = "")$V1
+acq.data <- acq.data.temp[which(acq.data.temp > 0)]
+remove(acq.data.temp)
+get.logdata <- function(seed, rawdata = acq.data, size = 500) {
+  set.seed(seed)
+  ind <- sample(seq(rawdata), size)
+  return(list(data = log(rawdata[ind]),
+              index = ind))
+}
+one_qq <- function(fit, method) {
+  qq <- data.frame(prediction = sort(fit$pred[1280,]),
+                   population = sort(acq.data[-get.logdata(1)$index]))
+  qplt <- ggplot() + geom_line(data = qq, aes(x = population, y = prediction), color = "#999999") + theme(legend.position = "none") + theme(axis.text.x=element_blank())
+  for (j in c(1281:1289)) {
+    qq <- data.frame(prediction = sort(fit$pred[j,]),
+                   population = sort(acq.data[-get.logdata(1)$index]))
+    qplt <- qplt + geom_line(data = qq, aes(x = population, y = prediction), color = "#999999") + theme(legend.position = "none") +
+      theme(axis.text.x=element_blank())
+  }
+  qplt <- qplt + geom_abline(aes(slope = 1, intercept = 0,colour = "red")) + theme(legend.position = "none") + theme(plot.title = element_text(size=15, color = "black")) + theme(axis.text.x=element_blank()) + ggtitle(method)
+  return(qplt)
+}
+p1 <- one_qq(fitc, "constrained (no truncation)")
+p2 <- one_qq(fith, "flexible (no truncation)")
+load("~/Projects/DAfinal/cmodel_MCMC.Rdata")
+cmodel_conf <- as.character(c(1:12))
+one_qq <- function(config, fit, strg, sam, method) {
+  qq <- data.frame(pred = sort((fit[[config]]$fit[[sam]]$spred)),
+                   pop = sort((fit[[config]]$popdata[[sam]])))
+  qplt <- ggplot() + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") + theme(axis.text.x=element_blank())
+  for (j in c(10:24)) {
+    qq <- data.frame(pred = sort((fit[[config]]$fit[[sam]]$pred[j,])),
+                   pop = sort((fit[[config]]$popdata[[sam]])))
+    qplt <- qplt + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") +
+      theme(axis.text.x=element_blank())
+  }
+  qplt <- qplt + geom_abline(aes(slope = 1, intercept = 0,colour = "red"))+ theme(legend.position = "none") + theme(plot.title = element_text(size=15, color = "black")) + theme(axis.text.x=element_blank()) + ggtitle(method) + ylab("prediction") + xlab("population")
+  return(qplt)
+}
+p3 <- one_qq(9, cons_fit, cmodel_conf,1, "constrained (with truncation)")
+p4 <- one_qq(10, cons_fit, cmodel_conf,1, "constrained (with truncation)")
+
+one_qq <- function(config, fit, strg, sam, method) {
+  qq <- data.frame(pred = sort((fit[[config]]$fit[[sam]]$pred[75,])),
+                   pop = sort((fit[[config]]$popdata[[sam]])))
+  qplt <- ggplot() + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") + theme(axis.text.x=element_blank())
+  for (j in c(76:88)) {
+    qq <- data.frame(pred = sort((fit[[config]]$fit[[sam]]$pred[j,])),
+                   pop = sort((fit[[config]]$popdata[[sam]])))
+    qplt <- qplt + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") +
+      theme(axis.text.x=element_blank())
+  }
+  qplt <- qplt + geom_abline(aes(slope = 1, intercept = 0,colour = "red")) + theme(legend.position = "none") + theme(plot.title = element_text(size=15, color = "black")) + theme(axis.text.x=element_blank()) + ggtitle(method) + ylab("prediction") + xlab("population")
+  return(qplt)
+}
+
+load("~/Projects/DAfinal/fmodel_MCMC_p5.Rdata")
+p9 <- one_qq(1, flex_fit_p5, cmodel_conf,1, "flexible (with truncation)")
+p10 <- one_qq(7, flex_fit_p5, cmodel_conf,1, "flexible (with truncation)")
+qq <- ggpubr::ggarrange(
+  p1, p2,
+  p3, p9,
+  p4, p10,
+  nrow = 3, ncol = 2)
+qq
+```
+
+
+## Posterior prediction variability
+
+* targeting on point estimats of population sum, $\sum_{i}X_i$
+
+* Predicted sum's are obtained through doing the experiment on 500 different simple random samples.
+
+```{r t2,  echo = FALSE, out.width='70%'}
+load("~/Projects/DAfinal/cmodel_mean.Rdata")
+load("~/Projects/DAfinal/bs_mean.Rdata")
+load("~/Projects/DAfinal/clt_mean.Rdata")
+load("~/Projects/DAfinal/fmm_mean.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p7.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p9.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p10.Rdata")
+
+cmodel_conf <- as.character(c(1:12))
+one_bxplt <- function(config, nppred, fmmp, bsp, cltp, strg) {
+  df1 <- data.frame(method = rep(NA, 6*500), value = rep(NA, 6*500))
+  df1$method[1:500] <- "T"
+  df1$value[1:500] <- nppred[[config]]$true*8983
+  df1$method[501:1000] <- "N"
+  df1$value[501:1000] <- nppred[[config]]$cpred*8983
+  df1$method[1001:1500] <- "K"
+  df1$value[1001:1500] <- flex_mean_p7[[1]]$kde*8983
+  df1$method[1501:2000] <- "C"
+  df1$value[1501:2000] <- cltp*8983
+  df1$method[2001:2500] <- "F"
+  df1$value[2001:2500] <- fmmp*8983
+  df1$method[2501:3000] <- "B"
+  df1$value[2501:3000] <- bsp*8983
+  p1 <- ggplot(df1, aes(x = method, y = value)) + geom_boxplot() + ggtitle(strg[config]) +
+    theme(plot.title = element_text(size=15, color = "blue"))
+  return(p1)
+}
+
+p1 <- one_bxplt(9,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf) + ggtitle("constrained (with truncation)")
+p2 <- one_bxplt(10,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf) + ggtitle("constrained (with truncation)")
+
+one_bxplt <- function(config, nppred, fmmp, bsp, cltp) {
+  df1 <- data.frame(method = rep(NA, 500*6), value = rep(NA, 6*500))
+  df1$method[1:500] <- "T"
+  df1$value[1:500] <- nppred[[config]]$true*8983
+  df1$method[501:1000] <- "N"
+  df1$value[501:1000] <- nppred[[config]]$cpred*8983
+  df1$method[1001:1500] <- "K"
+  df1$value[1001:1500] <- flex_mean_p7[[1]]$kde*8983
+  df1$method[1501:2000] <- "C"
+  df1$value[1501:2000] <- cltp*8983
+  df1$method[2001:2500] <- "F"
+  df1$value[2001:2500] <- fmmp*8983
+  df1$method[2501:3000] <- "B"
+  df1$value[2501:3000] <- bsp*8983
+  p1 <- ggplot(df1, aes(x = method, y = value)) + geom_boxplot() +
+    theme(plot.title = element_text(size=15, color = "blue"))
+  return(p1)
+}
+
+p9 <- one_bxplt(1, flex_mean_p9, fmm_mean, bs_mean, clt_mean) + ggtitle("flexible (with truncation)")
+p10 <- one_bxplt(1, flex_mean_p10, fmm_mean, bs_mean, clt_mean) + ggtitle("flexible (with truncation)")
+figure <- ggpubr::ggarrange(p1,p2,p9,p10, ncol = 2, nrow = 2)
+figure
+```
+
+## Empirical prediction risk
+
+* root mean square logarithmic error (RMSLE):
+$$RMSLE = \sqrt{\dfrac{\sum_{i =1}^{n}(log(pred^{(i)}) - log(true^{(i)}))^2}{n}}.$$
+
+\begin{figure}
+  \centering
+  \includegraphics[scale = 0.43]{rmse.png}
+  \\
+\end{figure}
+
+## Conclusion
+
+* Learn the distribution of commonly seen heavy-tailed data in audit using bayesian mixture models with stick breaking priors.
+
+* Normal-gamma prior is compared with t-betaprime prior and t-betaprime prior fits the data better and leads to smaller prediction error.
+
+* By truncation, we can fix the extrapolation problem. In terms of point estimates of $\sum \tilde{X}$, our method mimics the behavior of using lognormal KDE, finite mixture of lognormals, and sample sum. But our method maintains the merit of being integrated into a bigger bayesian hierarchy. 
+
