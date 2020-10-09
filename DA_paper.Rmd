@@ -1,0 +1,987 @@
+---
+title: Bayesian Nonparametric Model Fitting and Model Comparison on Heavy Tailed Data
+output: 
+  pdf_document:
+    number_sections: true
+bibliography: DA_paper.bib
+fontsize: 11pt
+urlcolor: blue
+header-includes:
+- \usepackage{float}
+- \usepackage{mathtools}
+- \usepackage{fullpage}
+- \usepackage{bm}
+- \usepackage{multirow}
+- \usepackage{tikz}
+- \usepackage[osf,sc]{mathpazo}
+- \floatplacement{figure}{H}
+abstract: 'Standard Bayesian analysis requires a family of parametric priors to be specified when fitting models and making inferences. This assumption leads to a substantial amount of work studying the uncertainty and sensitivity of the proposed parametric prior. In nonparametric Bayesian analysis, we are not constrained to assuming a certain family of parametric distributions. Instead, we can put a prior on different families of distributions, which is regarded as a flexible alternative to the standard Bayesian method. In this work, we estimate the density of a heavy-tailed dataset from Deloitte company using a nonparametric density estimation method. It is believed that the total sum of the recorded values in an audit book is closely related to the level of the misstatement if we can model the summation of true values behind them. Obtaining a reasonable density estimation of the true values will further assist us in detecting misstatements in financial audit activities. We approach the density estimation problem by using  stick-breaking priors, and develope two stick-breaking priors with different base measures. The connections and differences of those two priors are explored. We evaluate goodness of our fitting by comparing posterior predictive draws with our heavy tailed population data and compare sampling distributions of the inferential target, the sum of the true values, under various methods.'
+---
+```{r knitr-setup, echo = FALSE, message = FALSE}
+library(knitr)
+library(invgamma)
+library(dplyr)
+library(kableExtra)
+library(ggplot2)
+library(reshape2)
+library(mixtools)
+opts_chunk$set(dpi = 300, cache=TRUE, message = FALSE, cache.path = "~/Projects/DAfinal/DA-cache/",
+    fig.path = "~/Projects/DAfinal/DA-figures/", dev="png", fig.align = "center")
+```
+
+
+# Introduction
+
+A financial statement audit is defined as objective examination or evaluation of an organization’s financial statements and aims to ensure fairness and accuracy of the financial records. The audit procedures are nowadays requirements for almost all companies and auditor’s reports are also important references for bank and creditors before lending activities. As one part of the audit process, an auditor will examine and verify numbers recorded in company’s financial statements. However, these claimed numbers are sometimes not the true values of financial transactions and therefore affect the auditor’s opinion on whether material misstatements exist. 
+
+Material misstatement are those information that are sufficiently incorrect in financial statements. The occurrence of a material misstatement often has negative impact on other decisions that rely on these statements. In this project, we assume that each claimed value is greater or equal to the corresponding true value. This assumption is reasonable if we think about reporting the property's damage to the insurance company. The calimed (reported) damage, quantified in dollars, is very unlikely to be less than the true damage. And a higer claimed value may lead to a higher reimbursement. With this assumption, we can further quantify the misstatement (error) in the audit table with $n$ records as $\sum_{i = 1}^{n} C_i - \sum_{i = 1}^{n} T_i$, where $C$ represents the claimed values and $T$ represents the true values.
+
+One obligation for an auditor is to be able to detect material misstatement given a table filled with the claimed values $C$. By modeling the true values $T$, we expect to get reasonably good density estimation $\hat{f}(T)$ of $T$. Since the summation of true values $T$ is in part of the misstatement error, learning the distribution of $T$ is a key step in the analysis of misstatement in audit. But estimating the density of true values $T$ requires some techniques since true values are very "imbalanced" and heavy-tailed. The true values, in general, are financial data quantified in dollars. For example, a big company may have acquisition costs both for buying office desks and purchasing real estates or even for takeover of other companies that will highly likely to be quite large. And those types of transactions with larger values describe substantial amounts of purchasing activities in one company. One challenge in modeling imbalanced data in our case is that we have just a few data (those corresponds to the extreme large true values) through out the density estimation process. But we do need to come up with a good density estimator that takes care of the right tail since those values in the right tail affect the most in $\sum_{i = 1}^{n} T_i$.
+
+
+This project concentrates on modeling the true value $T$ by estimating its density. If one learns the distribution of $T$ well then in the future by incorporating some model $P(C|T)$, in reality the auditor can make inference on $P(T|C)$ when only the claimed values $C$ is observed or partially observed. Finally the auditor can make inference on $p((\sum C - \sum T) > M)$, where $M$ is a threshold for material misstatement. Given a heavy tailed dataset, the standard kernel density estimator on the data has its own limitations [@Buch]. It will have under-smoothing effects at the tail and provide with an inaccurate estimate. Furthermore, classical kernel density estimation cannot adaptively fit the data since it uses a fixed bandwidth parameter in the estimation. We will approach the density estimation problem by using nonparametric bayesian methods to estimate the "heavy-tailed" density, in which mixture models in nonparametric bayes can be flexible enough and yield adaptive bandwidth for density estimation. One method is Dirichlet process mixture model with stick breaking priors proposed by Ishwaran and James [@Ish] . We implement efficient MCMC algorithms for sampling the posteriors and then make inference on our predictive density [@Ish]. 
+
+In this work, we explore and evaluate how much improvements in estimating the density we obtained by using adpative bandwidth. For prediction purpose, we compare the predictions from different models and evaluate the prediction performance.
+After we calculate some empiricl risks and compare the sampling distribution of the point estimates, our finding is that when we include some prior knowledge for the right boundary of the data, the prediction procedure using nonparametric bayes method can be a reliable approach for predicting the sum of true values $T$. 
+
+In Section 2, we explore some features in our data. In section 3, we briefly review nonparametric bayesian density estimation and stick breaking priors. In section 4, we introduce DP mixture models with two priors, namely normal-gamma prior and t-betaprime prior. And we compare these two priors. Section 5 includes posterior inference we need to implement the blocked gibbs sampler. Section 6 describe the details for choosing different configurations of the hyperparameters in the priors. Section 7 shows the density estimation results and the prediction risks for all different models considered in this paper. Section 8 concludes this project.
+
+
+
+# Explore The Data and Kernel Density Estimator
+
+## Heavy-tailedness and multi-modality
+
+Our dataset can be described as a collection of univariates that are nonnegative and have the characteristic of being heavy-tailed. To visualize our data, we can draw a histogram of the raw data and also a density plot on the log-transformed data. It is also not hard to notice from the plot that there's also multi-modality in our data. The multi-modality phenomenon requires our density estimation method not only to capture the overall "shape" of the distribution density but also to capture the curvature between modes. Multi-modality also suggests us to have multiple components in the density estimation when doing a mixture model. 
+
+```{r qqplot_itself, out.width='60%', warning=FALSE, echo = FALSE, cache=TRUE, fig.cap="The histogram and the boxplot are intended to show that our data is really heavy-tailed. The density plot is intended to show multi-modality and undersmoothed effect in the right tail."}
+acq.data.temp <- read.csv("~/Projects/DAfinal/acquisition.csv", header = FALSE, sep = "")$V1
+acq.data <- acq.data.temp[which(acq.data.temp > 0)]
+remove(acq.data.temp)
+
+QQ1 <- data.frame(population = sort(acq.data))
+qplt1 <- ggplot(QQ1, aes(x=population)) + geom_histogram() + xlim(0, max(acq.data)+1) +
+  scale_y_continuous(limits=c(0,500))
+qplt2 <- ggplot() + geom_boxplot(aes(y = log(acq.data))) + ylab("value")
+qplt3 <- ggplot(QQ1, aes(log(population))) + geom_density(adjust = 1)
+set.seed(1)
+ind <- sample(seq(length(acq.data)), 500)
+dens <- density(log(acq.data[ind]), from = 0)
+kdepred <- rep(NA, 8983)
+for (i in seq(8983)) {
+  index <- sample(ind, 1)
+  kdepred[i] <- exp(rnorm(1, log(acq.data)[index], dens$bw))
+}
+
+qplt4 <- ggplot() + geom_point(aes(x = sort(acq.data[-ind]), y = sort(kdepred))) + geom_abline(aes(slope = 1, intercept = 0,colour = "red")) + ylab("prediction") + xlab("population") + theme(legend.position = "none")
+qplt4 <- ggplot() + geom_density(aes(x = acq.data[ind]), adjust = 1) + xlab("population")
+p1<- ggpubr::ggarrange(qplt1, qplt2, qplt3, qplt4, nrow = 2, ncol = 2)
+p1
+```
+
+## Kernel Density Estimator
+
+Till now, we have learned some features of our data and in terms of density estimation, perhaps the most well-known method is kernel density estimator (KDE). A gaussian kernel density estimator estimates the density function $f(x)$ by 
+$$\hat{f}_h(x) = \frac{1}{n} \sum_{i =1}^{n}\phi(\frac{x-x_i}{h}),$$
+where $h$ is the bandwidth and $\phi$ is the gaussian kernel. The guassian KDE fits a normal distribution with weights $\frac{1}{n}$ at each data point $x_i$ and the optimal bandwidth is choosen so that the expected integrated squared error is minimized [@Shaliz]. Essentially, finding the "optimal" bandwidth is equivalent to find a "banlanced" point in the bias and variance tradeoff. KDE will work quite well for most of the time but it may fail under some special circumstances. KDE can undersmooth the right tail if the data is heavy-tailed and very imbalanced, see an example of suicide data [@Silverman86]. In addition to choosing a bandwidth, we can also choose the functional form of the kernel in KDE to optimize the fitting of KDE. But it is believed that the bandwidth $h$ is more important than the choice of kernels [@scott2015]. 
+
+```{r qqkde, out.width='40%', warning=FALSE, echo = FALSE, cache=TRUE, fig.cap="The QQ-plot is about predictions from KDE (using lognormal kernel) versus the population. It shows that using a single optimal bandwidth, KDE does not fit well in the right tail."}
+
+qplt4 <- ggplot() + geom_point(aes(x = sort(acq.data[-ind]), y = sort(kdepred))) + geom_abline(aes(slope = 1, intercept = 0,colour = "red")) + ylab("prediction") + xlab("population") + theme(legend.position = "none")
+qplt4
+```
+
+## Mixture Model
+
+Gaussian KDE can be seen as a specific density estimate of a mixture model where for each data point, there is a normal distribution centered at that data point. A more general form of a normal mixture model is 
+$$f(x| {\pi}, {\theta}) = \sum_{i = 1}^{m} \pi_{i} \phi(x|\theta_{i}),$$
+where $m$ is the toal number of mixture components, $\pi_i$'s are the mixing probabilities and $\theta_i$'s are the parameters of gaussian kernel. To fit such mixture model, we need to decide how many components in the mixture model and their weights and the component-specific parameters. In practice, we either know how many clusters that our data intrinsically have a priori, for instance when we fit a density estimate for a dataset grouped by sex, or we need to decide how many components we want to add to the mixture model. Since there's no natural grouping structure in our data, we take a nonparametric approach to dealing with the number of components in the mixture model. Namely, we do not assume a finite number of components in advanced but rather assume infinite number of components in the mixture. The nonparametric approach will not require us to specify total number of components but let the data speak. We will also take the bayesian approach since we want our method to be included into a bigger bayesian frame. A mixture model in bayesian requires us to assign priors to $(\pi, \theta)$ and the nonparametric bayes density estimation will be further discussed in section 3. A single "optimal" bandwidth in KDE is not good enough to fit the right tail of our heavy-tailed dataset. Therefore, we assume that each component has its own parameters to give adaptiveness to the mixture components. This will be further discussed in section 4. 
+
+# Nonparametric Bayesian Density Estimation
+
+Let $X_1,...,X_n \sim F$ where $F$ has density $f$. To estimate $f$, we can approach this problem by using the two different priors discussed above. One example is to use Dirichelet process (DP) prior for $G$ where the problem is described as
+$$X_i | G \stackrel{iid}{\sim} G,$$
+$$G | \alpha, H \sim DP(\alpha H).$$
+Since a prior for probability measure $G$ requires infinite dimensional parameters, this falls into the category of bayesian nonparametric problems.
+
+However, DP prior is sometimes undesirable since it generates discrete random probability measure with probability one [@Teh]. To have an estimator that yields continuous distribution but still involves DP prior, we can use continuous kernels and fit a Dirichelet process mixture model.
+
+In this section, we describe bayesian nonparametric mixture models with stick-breaking priors. As discussed by Ishwaran and James [@Ish], $\mathcal{P}_N(\bm{\nu}, \bm{\omega})$ includes both DP and Pitman-Yor process. When $\nu_i = 1$ for every $i$ and $\omega_i = \alpha$ for every $i$, the stick breaking process is consistent with the constructive definition of $DP(\alpha H)$ proposed by Sethuraman [@Seth]. To see the connection between $\mathcal{P}_N(\bm{\nu}, \bm{\omega})$ and the Pitman-Yor process (a.k.a two-parameter Poission-Dirichelet process), if we define each $\nu_k = 1 - a$ and $\omega_k = b + ka$, where $0 \leq a < 1$, $b > -a$ and $k = 1,...,N$, we finally get a random probability measure constructed by stick breaking process with two parameters $a$ and $b$. Then, under this condition, $\mathcal{P}_N(\bm{\nu}, \bm{\omega})$ is exactly the Pitman-Yor process $\mathcal{PY}(a,b)$.
+
+## Dirichelet Process Mixture Model
+
+To fix notation, $\mathbf{X} = {(X_1,...,X_n)}$ is the data in our models, which are the log-transformed version of the true values $T$. We use normal kernel as our smooth kernel in the DP mixture model and the mixture model is specified as follow,
+$$X_i | \bm{\theta}, \bm{K} \stackrel{ind}{\sim} N(\theta_{k_i}), \quad where \ \theta_{K_i} = (\mu_{k_i}, \phi_{k_i}^{-1}),$$
+where $k_i$ serves as an indicator of which group, within the mixture, $X_i$ belongs to and $\phi_{k_i}^{-1}$ is the precision.
+
+The DP prior for such model can be specified as
+$$\theta_i | G \stackrel{iid}{\sim} G, \quad G \sim DP(\alpha G_0),$$
+where $\alpha$ is the concentration parameter and $G_0$ is the base measure in DP process. Under this model, a Polya urn Gibbs sampling method is developed by Escobar and West [@Escobar] by marginalizing out $G$ and use the Polya urn prediction rule to update $\theta_i$'s one coordinate at a time. However, this algorithm suffers from slow mixing. 
+
+The blocked gibbs sampler was developed by Ishwaran and James that has better mixing properties than Polya urn gibbs sampler. It also avoids marginalizing our prior $G$ when sample from the posterior. The caveat is that we are only allowed to specify a finite $N$ for constructing $\mathcal{P}_N(\bm{\nu}, \bm{\omega})$ measures for using blocked gibbs sampler. This truncated version of stick breaking priors forms an approximation of $\mathcal{P}_{\infty}(\bm{\nu}, \bm{\omega})$ and some technical details about the approximation are discussed by Ishwaran et al. Here, we differentiate two different stick-breaking priors according to the base measure in the DP process. One is the normal-gamma conjugate prior for normal models when the mean and precision are both unkown. The other is a t-betaprime prior which should be considered as a more flexible alternative to the normal-gamma prior. The differences will be demonstrated afterwards with further details.
+
+## Stick Breaking Priors
+
+Ishwaran and James [@Ish] defined the stick breaking priors to be almost surely discrete random probability measures $\mathcal{P}$ that can be represented as 
+\begin{equation}
+\mathcal{P}(\cdot) = \sum_{k = 1}^{N}p_K \delta_{Z_k}(\cdot), \quad 1 \leq N \leq \infty, 
+\end{equation}
+where $\delta_{Z_k}(\cdot)$ denotes the Dirac measure at $Z_k$. The $p_k$'s are random probability weights independent from $Z_k$'s and $Z_k$'s are i.i.d random variables from some nonatomic distribution $H$. The way for constructing random probability weights, $\bm{p} = (p_1, ...,p_{N})$, is defined as $$p_1 = V_1$$ $$p_i = V_i \prod_{j = 1}^{i-1}(1 - V_j),\quad i= 2,...,N$$ $$V_i \sim Beta(\nu_i, \omega_i),\quad i= 1,...,N.$$ If $N$ is finite, we set $V_N = 1$ to guarantee that $\sum_{k=1}^{N}p_k = 1$. This process derives its name from an analogy to iteratively breaking the proportion $V_i$ from the remainder of the unit-length stick, $\prod_{j = 1}^{i-1}(1 - V_j)$ and set stick breaking priors apart from general random probability measures (Ishwaran et al. 2001). The flexibility of stick breaking priors is achieved by providing different $\bm{\nu} = (\nu_1, \nu_2,...)$ and $\bm{\omega} = (\omega_1, \omega_2,...)$. Ishwaran et al. (2001) called the stick breaking priors $\mathcal{P}$ as $\mathcal{P}_N(\bm{\nu}, \bm{\omega})$ measures and this notation connects various probability measures including the Dirichlet process [@Fergu] and Pitman-Yor process [@Pit-Yor].
+
+# Two Priors in Dirichelet Process Mixture Model 
+
+## Mixture model with normal-gamma prior
+
+
+$$X_i | \bm{\theta}, \bm{K} \stackrel{ind}{\sim} N(\theta_{k_i}), \quad where \ \theta_{K_i} = (\mu_{k_i}, \phi_{k_i}^{-1})$$
+$$\mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i} \sim N(\mu_0, (\kappa_0 \phi_{k_i})^{-1})$$
+$$\phi_{k_i} | v_0, ss_{0} \sim gamma({v_0}, {ss_0})$$
+$$\mu_0 \sim N(a, \sigma_0^2), \quad \kappa_0 \sim gamma(g_1, g_2)$$
+$$\bm{\pi} \sim \mathcal{SB}(1,\alpha), \quad \bm{K} \sim Multi(\bm{\pi})$$
+$$\alpha \sim gamma(c, d)$$
+
+## Mixture model with t-betaprime prior
+
+$$X_i | \bm{\theta}, \bm{K} \stackrel{ind}{\sim} N(\theta_{k_i}), \quad where \ \theta_{K_i} = (\mu_{k_i}, \phi_{k_i}^{-1})$$
+$$\mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i}, r_{k_i} \sim N(\mu_0, (\kappa_0 \phi_{k_i} r_{k_i})^{-1})$$
+$$r_{k_i} \sim gamma(\frac{df}{2}, \frac{df}{2})$$
+$$\phi_{k_i} | v_0, ss_{0}, h_{k_i} \sim gamma({v_0}, {ss_0}h_{k_i})$$
+$$h_{k_i} | v_1 \sim gamma(v_1, v_1)$$
+$$\mu_0 \sim N(a, \sigma_0^2), \quad \kappa_0 \sim gamma(g_1, g_2)$$
+$$\bm{\pi} \sim \mathcal{SB}(1,\alpha), \quad \bm{K} \sim Multi(\bm{\pi})$$
+$$\alpha \sim gamma(c, d)$$
+
+## Comparison of two priors
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ |l|l|l|l| }
+\hline
+\multicolumn{4}{ |c| }{Prior information} \\
+\hline
+Prior & Conditionals &  prior mean & prior variance \\ \hline
+\multirow{3}{*}{Normal-gamma}
+  & $(\mu_{k_i} | \mu_0, \kappa_0, \phi_{k_i})$ & $\mu_0$ & $\dfrac{1}{\kappa_0 \phi_{k_i}}$ \\
+   & $(\mu_{k_i} | \mu_0, \kappa_0, v_0, ss_o)$ & $\mu_0$ & $\dfrac{ss_0}{\kappa_0 (v_0 -1)}$ \\
+ & $(\sigma_{k_i}^2 | v_0, ss_0)$ & $\dfrac{ss_0}{v_0 -1}$ & $\dfrac{ss_0^2}{(v_0-1)^2(v_0 - 2)}$  \\ \hline
+\multirow{3}{*}{T-betaprime}
+  & $(\mu_{k_i} | \mu_0, \kappa_0, \phi_{k_i}, df)$ & $\mu_0$ & $\dfrac{1}{\kappa_0 \phi_{k_i}} \times \dfrac{df}{df-2}$ \\
+  & $(\mu_{k_i} | \mu_0, \kappa_0, v_0, ss_o, df, v_1)$ & $\mu_0$ & $\dfrac{ss_0}{\kappa_0 (v_0 -1)} \times \dfrac{df}{df-2}$ \\
+ & $(\sigma_{k_i}^2 | v_0, v_1, ss_0)$ & $\dfrac{ss_0}{v_0 - 1}$ & $\dfrac{ss_0^2}{(v_0-1)^2(v_0 - 2)} \times \dfrac{v_1 + v_0 - 1}{v_1}$ \\ \hline
+\end{tabular}
+\caption{Prior mean and variance for the conditional distributions in both models.}
+\end{table}
+
+From the table, we see that constrained model and flexible model, under above model specification, shares the same prior mean for $\mu_{k_i}$ and $\sigma_{k_i}^2$ , but with flexible model having larger prior variance under certain conditions. On one hand, if $2 < df < \infty$, prior variance for $\mu_{k_i}$ in flexible model is larger than constrained model, but as $df \rightarrow \infty$, prior variance for mean parameter in flexible model converges to that in constrained model. On the other hand, $\dfrac{v_1 + v_0 - 1}{v_1}$ is strictly greater than 1 if and only if $v_0 > 1$ and as $v_1 \rightarrow \infty$ that quantity goes to 1, which make equal prior variances for $\sigma_{k_i}^2$ in both models.
+
+To understand the role of $\kappa_0$ in the prior, we notice that $E((\mu_{k_i} - \mu_0)^2|\mu_0, \kappa_0, \phi_{k_i}) = \dfrac{\sigma_{k_i}^2}{\kappa_0}$, which means that $\kappa_0$ is about the size of $\dfrac{\sigma_{k_i}^2}{(\mu_{k_i} - \mu_0)^2}$.
+
+# Posterior Inference
+
+Before describing the blocked gibbs sampler, it is helpful to first figure out the conjugacy in DP mixture model. First, notice that the base measure $G_0$ in the constrained prior is conjugate to normal distribution in the mixture component. Second, generalized Dirichelet prior assigned to $\mathbf{P}$ is conjugate to the multinomial sampling model. Third, gamma prior on $\alpha$ is conjugate to the $Beta(1,\alpha)$ sampling model for $V_i$. These conjugate priors are by no means the only choice. But they are helpful for yielding easy-to-implement gibbs sampler.
+
+For each iteration in the blocked gibbs sampler, define $\mathbf{K^*} = \{K_1^*,...,K_m^*\}$ to be the set of current $m$ unique values of $\mathbf{K}$ and we draw values from full conditionals of each random variable. Below are the Gibbs sampler for the constrained model.
+
+1. Conditionals for $\bm{\theta}$:
+Let $\{K_1 ^*,...,K_m ^*\}$ denote the set of $m$ unique values of $\mathbf{K}$. Simulate $\theta_k \stackrel{iid}{\sim} G_0$ for each $k \in \mathbf{K} - \{K_1 ^*,...,K_m ^*\}$. Also for $j = 1,...,m$, draw $(\theta_{K_j^*} | \bm{K}, \mu_0, \kappa_0, \bm{X})$ from
+\begin{equation}
+f(\theta_{K_{j}^{*}} | \bm{K}, \mu_0, \kappa_0, \bm{X}) \propto G_0(d \theta_{K_j^*})\times \prod_{\{i: K_i = K_j^*\}}f(X_i|\theta_{K_j^*}, \mu_0, \kappa_0)
+\end{equation}
+Without loss of generality, denote $n^{(\ell)} = |i: K_i = K_{\ell}^*|$ to be the size of the set. Under the $\ell$th block and by the conjugate result, we have again a normal-gamma posterior for the mean parameter $\mu^{(\ell)}$ and precision parameter $\phi^{(\ell)}$. To summarize,
+\begin{equation}
+\mu^{(\ell)}, \phi^{(\ell)} | \bm{K}, \mu_0, \kappa_0, \bm{X} \sim 
+NG(\mu_{0}^{(\ell)}, \kappa_{0}^{(\ell)}, v_{0}^{(\ell)}, ss_{0}^{(\ell)})
+\end{equation}
+$$\mu_{0}^{(\ell)} = \frac{\kappa_0 \mu_0 + n^{(\ell)}\bar{x}^{(\ell)}}{\kappa_0 + n^{(\ell)}}, \qquad where \quad \bar{x}^{(\ell)}= \frac{\sum_{\{i: K_i = K_{\ell}^*\}}x_i}{n^{(\ell)}}$$
+$$\kappa_{0}^{(\ell)} = (\kappa_{0} + n^{(\ell)})^{-1}$$
+$$v_{0}^{(\ell)} = \frac{v_{0} + n^{(\ell)}}{2}, \qquad ss_{0}^{(\ell)} = \frac{ss_{0} + \sum_{\{i: K_i = K_{\ell}^*\}}(x_i - \bar{x}^{(\ell)})^2}{2} + \frac{\kappa_{0}n^{(\ell)}(\bar{x}^{(\ell)} - \mu_0)^2}{2(\kappa_{0} + n^{(\ell)})}$$
+
+2. Conditionals for $\mathbf{K}$: for each $i =1,...n$, draw $K_i$ from
+\begin{equation}
+(K_i | \bm{\theta}, \bm{P}, \mu_0, \kappa_0, \bm{X}) \stackrel{ind}{\sim} \sum_{k=1}^{N}p_{k,i} \delta_k(\cdot)
+\end{equation}
+\begin{equation}
+(p_{1,i},...,p_{N,i}) \propto (p_1f(X_i|\theta_1,\mu_0, \kappa_0),...,p_N f(X_i | \theta_N,\mu_0, \kappa_0))
+\end{equation}
+
+3. Conditionals for $\mathbf{P}$: 
+\begin{equation}
+V_{k}^{*} | \alpha, \bm{K} \stackrel{ind}{\sim} Beta(1 + M_k, \alpha + \sum_{l = k + 1}^{N} M_l), \quad k=1,...,N-1
+\end{equation}
+\begin{equation}
+p_1 = V_1^*, \quad p_k = V_k^* \prod_{i = 1}^{k-1}(1 - V_i^*),
+\end{equation}
+where $M_k$ is the number of $K_i$ values that equal $k$.
+
+4. Conditionals for $\alpha$:
+\begin{equation}
+\alpha | \bm{V} \sim Gamma(c + N - 1, d + \sum_{i=1}^{N-1} ln(1 - V_i))
+\end{equation}
+
+5. Conditionals for $\mu_0$ and $\kappa_0$: 
+\begin{equation}
+f(\mu_0 | \bm{\theta}, \bm{K}, \bm{X},\kappa_0) \propto \pi(d\mu_0)p(\bm{\theta} | \mu_0, \kappa_0)
+\end{equation}
+\begin{equation}
+f(\kappa_0 | \bm{\theta}, \bm{K}, \bm{X},\mu_0) \propto \pi(d\kappa_0)p(\bm{\theta} | \mu_0, \kappa_0)
+\end{equation}
+
+Under blocked gibbs sampler, use $\bm{\Pi} = (\bm{\theta}, \bm{K}, \bm{P}, \alpha, \mu_0, \kappa_0)$ to denote parameters in the joint posterior and the Bayesian density estimation of the DP mixture model is given by
+\begin{equation}
+f(X_{n + 1} |X_{1 :n}) = \int f(X_{n+1} | \bm{\Pi})dP(\bm{\Pi} | X_{1 :n})
+\end{equation}
+
+The posterior inference under mixture model with flexible prior is similar to the procedure mentioned above but with some additional Gibbs sampling steps. For simplicity, we will only list those additional steps and the remaining steps should be the same as the previous sampling scheme.
+
+1. Conditionals for $h_{k_j^{*}}$:
+\begin{equation}
+(h_{k_j^{*}} | v_0, ss_0, v_1, \phi_{k_j^{*}}) \sim gamma(v_0 + v_1, ss_0 \phi_{k_j^{*}} + v_1)
+\end{equation}
+
+2. Conditionals for $\mu_{k_j^{*}}$:
+\begin{equation}
+(\mu_{k_j^{*}} |\bm{K}, \bm{X}, \phi_{k_j^{*}}, \kappa_0, r_{k_j^{*}}) \sim N \left(\frac{\phi_{k_j^{*}} n^{(j)} \bar{x}^{(j)} + \kappa_0 \phi_{k_j^{*}} r_{k_j^{*}} \mu_0}{\phi_{k_j^{*}} n^{(j)} + \kappa_0 \phi_{k_j^{*}} r_{k_j^{*}}}, (\phi_{k_j^{*}} n^{(j)} + \kappa_0 \phi_{k_j^{*}} r_{k_j^{*}})^{-1}\right)
+\end{equation}
+
+3. Conditionals for $\phi_{k_j^{*}}$:
+\begin{equation}
+(\phi_{k_j^{*}} |\mu_{k_j^{*}}, h_{k_j^{*}},  v_0, \mu_0, \kappa_0) \sim gamma\left(\frac{n^{(j)}+ 2v_0 + 1}{2}, r\right)
+\end{equation}
+where $r = \dfrac{1}{2}(\sum_{\{i: k_i = k_j^{*}\}} (x_i - \mu_{k_j^{*}})^2 + (\mu_{k_j^{*}} - \mu_0)^2 \kappa_0 r_{k_j^{*}} + 2ss_0 h_{k_j^{*}}).$
+
+4. Conditionals for $r_{k_j^{*}}$:
+\begin{equation}
+(\kappa_{k_j^{*}} | \phi_{k_j^{*}}, df, \mu_0, \mu_{k_j^{*}}, \kappa_0) \sim Gamma\left(\frac{df + 1}{2}, \frac{df + \kappa_0 \phi_{k_j^{*}} (\mu_{k_j^{*}} - \mu_0)^2}{2}\right)
+\end{equation}
+
+5. Conditionals for $\kappa_0$:
+\begin{equation}
+(\kappa_0 | g_1, g_2, \mu_0, \bm{\phi}, \bm{r}) \sim Gamma\left(\frac{N + 2g_1}{2}, \frac{2g_2 + \sum_{i=1}^{N}\phi_i r_i (\mu_i - \mu_0)^2}{2}\right)
+\end{equation}
+
+6. Conditionals for $\mu_0$:
+\begin{equation}
+(\mu_0 | \bm{\mu}, \bm{r}, \bm{\phi}, \kappa_0) \sim N\left(\frac{\kappa_0 \sum_{i=1}^{N} \phi_j r_j \mu_j + a{\sigma_0}^{-2}}{\kappa_0 \sum_{i=1}^{N} \phi_j r_j + {\sigma_0}^{-2}},(\kappa_0 \sum_{i=1}^{N} \phi_j r_j + {\sigma_0}^{-2})^{-1}\right)
+\end{equation}
+
+# Data-based Simulation Design
+
+The "acquisition value" dataset contains $n = 9483$ data points from which we separate the data into two parts. We use the training data (of sample size 500) as input to fit the mixture model and leave the holdout dataset for testing. Method of obtaining training samples are just simple random sampling. The experiments are done under multiple simple random samples (500 different samples), through which we get the sampling distribution of the summation of $T$. Heavy tailed characteristic can be observed both from the qqplot and density plot so that our data is extremely imbalanced with few data at the right tail.
+
+Although the $DP(\alpha G_0)$ and stick-breaking process $\mathcal{P}_N(1, \alpha)$ are equivalent only if $N \rightarrow \infty$, for computational consideration, we need some finite $N$ to do the fittings. Any finite $N$ will induce a finite stick-breaking procedure which can be considered as an approximation to the infinite stick-breaking process. In our experiment, we fix $N=50$. It is also worth mentioning that the stick-breaking process might be vulnerable to numerical underflow issue when generating beta random variables. To be more concrete, the underflow issue, related to our problem, can occur when generate some $beta(a, b)$ random variables with very small $b$ values. Therefore we adopt a scheme where we first generate random log-gamma variables and then generate the target beta random variables. The algoritm developed by Marsaglia and Tsang [@Tsang] is included in appendix A.
+
+
+
+The data-based simulation experiment aims to choosing different but reasonable values for hyperparameters in both priors and to see its impact on our inferential target. We will choose hyperparameter values that guarantee the existence of the first and second moments in table 1. Some prior information tables are included in appendix B.
+
+## Design for Constrained Model
+
+Constrained prior are parameterized by 8 hyperparameters in total. To be more specific, $(v_0, ss_0)$ mainly control the prior for $\sigma_{k_{i}}^2$; $(a, A)$ control grand mean $\mu_0$; $(g_1, g_2)$ controls $\kappa_0$; $(c, d)$ control the concentration parameter $\alpha$.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ |c|c|c|c|c| } 
+\hline
+Parameter & $(v_0,ss_0)$ & $(g_1, g_2)$ & $(a, A)$ &  $(c,d)$\\
+\hline
+\multirow{3}{4em}{Value} & (2.13, 0.6) & (1, 4) & (0, 100) & (3, 0.35)\\ 
+& (4, 1.75) & (0.5, 2) &  & (11, 1)\\ 
+& (10, 6.2) & &  & \\ 
+\hline
+\end{tabular}
+\caption{Design table for constrained model.}
+\end{table}
+
+### $v_0$ and $ss_0$
+
+- To guarantee existence of prior variance of $(\sigma_{k_i}^2 | v_0, ss_0)$, we need a $v_0 > 2$. 
+
+- We saw that almost all estimated $\sigma_{k_i}^2$'s are less than 1 from the finite mixture model fitting, and we will incorporate that knowledge into the prior $\sigma_{k_i}^2 \sim invgamma(v_0, ss_0)$ as a form of tail event probability. To be more specific, we do not want to specify a prior for $\sigma_{k_i}^2$ that has $p(\sigma_{k_i}^2 > 1) > 0.1$. The treshold probability 0.1 is subjective and varys from person to person.
+
+- Multiple density curves for $(\sigma_{k_i}^2 | v_0, ss_0)$
+
+```{r prior_v0_ss0, out.width='50%', echo=FALSE}
+Xgrid <- seq(from = 0.01, to = 1.5, by = 0.01)
+plot(Xgrid,dinvgamma(Xgrid, v0[1], rate = ss0[1]), type = "l",xlab = "sigma^2_k", ylab = "density", col = "red")
+lines(Xgrid,dinvgamma(Xgrid, v0[2], rate =ss0[2]), col = "blue")
+lines(Xgrid,dinvgamma(Xgrid, v0[10], rate =ss0[10]), col = "purple")
+lines(Xgrid,dinvgamma(Xgrid, v0[25], rate =ss0[25]), col = "green")
+lines(Xgrid,dinvgamma(Xgrid, v0[83], rate =ss0[83]), col = "brown")
+lines(Xgrid,dinvgamma(Xgrid, v0[114], rate =ss0[114]), col = "orange")
+lines(Xgrid,dinvgamma(Xgrid, v0[147], rate =ss0[147]), col = "grey")
+lines(Xgrid,dinvgamma(Xgrid, v0[179], rate =ss0[179]), col = "black")
+legend("topright", legend=c("v0=2.04,ss0=.55", 
+                            "v0=2.13,ss0=.6",
+                            "v0=2.83,ss0=1",
+                            "v0=4,ss0=1.75", "v0=8,ss0=4.65",
+                            "v0=10,ss0=6.2", "v0=12,ss0=7.85",
+                            "v0=14,ss0=9.45"),
+       col=c("red", "blue", "purple", "green", "brown", "orange", "grey", "black"), lty=1, cex=0.8)
+```
+
+Above plot are the prior density plots for different paris of $(v_0, ss_0)$'s that yield roughly the same tail event probability $p(\sigma_{k_i}^2 > 1) \approx 0.1$. $v_0$ is the main parameter controlling the tail shape for $(\sigma_{k_i}^2 | v_0, ss_0)$ while $ss_0$ mainly takes charge the behavior around the origin. From the density plot, with an increasing sequence both for $v_0$ and $ss_0$, we observe that the prior becomes more light in tail and at the origin. Personally, I will take my three choices to be $(v_0 = 2.13, ss_0 = 0.6)$, $(v_0 = 4, ss_0 = 1.75)$, $(v_0 = 10, ss_0 = 6.2)$. Here are some reasons. First, I want the prior density does not decay too fast around the origin. Small in-group variances might correspond to the rare(large) values at the tail, which are hard to be grouped into a component largely formed by "small" values since the rare ones are far away from the centroid. Second, from the prior density plot, we may say that the choice of $(v_0 = 2.13, ss_0 = 0.6)$ and $(v_0 = 10, ss_0 = 6.2)$ yield curvatures that are at two ends of the "spectrum" of the prior density plot, while $(v_0 = 4, ss_0 = 1.75)$ serves as a middle case.
+
+### $g_1$ and $g_2$
+
+- $\kappa_0 \sim gamma(g_1, g_2)$; I will mainly tune the shape parameter $g_1$ since for $\kappa_0$, we are more interested in those $\kappa_0$'s around the origin, which is mainly controlled by $g_1$. Small values for $\kappa_0$ allow more adaptation for fitting those large $\mu_k$'s at the right tail since those $\mu_k$'s are more or less far away from the grand mean $\mu_0$.
+
+- Since $\kappa_0$ is about the size of $\dfrac{\sigma_{k_i}^2}{(\mu_{k_i} - \mu_0)^2}$, which can be considered as the square of the (translated) coefficient of variation, we obtain the plug-in estimates for that (translated) coefficient of variation from the finite mixture model fittings. It turns out that the estimated mean for $\kappa_0$ is $0.25$, I will choose two sets of $(g_1, g_2)$ that match that quantity.
+
+- $g_1 = 1, g_2 = 4$ introduces mode at 0 and matches the estimated mean of $\kappa_0$ from the finite mixture model.
+
+- $g_1 = 1/2, g_2 = 2$ serves as another choice that introduce more "sharp" asymptote around 0 but still have the prior mean of $\kappa_0$ to be 0.25, which matches the estimated mean. The purpose of reducing $g_1$ is to see whether more asymptote around the origin in the prior have "significantly big" impact on the fitting. 
+
+### $a$ and $\sigma_0^2$
+
+- $\mu_0 \sim N(a = 0, \sigma_0^2 = 100)$; a somehow diffuse prior; since $\mu_0$ lies in the second hierarchy in both models' prior (relatively far away from $\mu_k$'s and $\sigma_k$'s), I think different priors for $\mu_0$ will not have hugely different impact on the fittings. Also since we work on log-scaled data, a variance of 100 in the normal prior might be large enough for the grand mean $\mu_0$.
+
+
+### $c$ and $d$
+
+- Conditioned on $N=50$ (total number of mixture) and $n=500$ (sample size) in the databased experiment, I investigate the role of concetration parameter $\alpha$ with prior $\alpha \sim gamma(c, d)$.
+
+- Since we choose $N=50$ to do the databased experiment, we may not want those $\alpha$'s that can induce too big $N$ in the mixture model, since that situation may potentially hurt the fitting due to the argument that $N=50$ is too small.
+
+- One way to get how large total number of mixture will be under an $\alpha$ is to calculate the prior probability $P(N_{induced} > N=50)$ in our case. In principle, we do not want this probability to be too big provided the user-specified $N$.
+
+- It might also be useful to think about the DP mixture as the Chinese resturant process [@Teh2010] with number of customers $n = 500$ and concentration parameter $\alpha$. To choose hyperparameter values for $c$ and $d$ in $\alpha \sim gamma(c, d)$, we first look at the distrubution of total number of nonempty tables obtained by Monte Carlo simulation.
+
+```{r long, out.width='60%', echo=FALSE, fig.cap="Density plots for number of occupied tables in the restraunt process with subtitiles representing different values in alpha."}
+include_graphics('~/Projects/DAfinal/DA-figures/long-1.png')
+```
+
+From above facet plot, we may conclude that $\alpha$'s that are greater than 15 are too big for $N = 50$ since the prior mode is already greater than 50. To choose values for $c$ and $d$, we search for choices that yield roughly the same probability of $\alpha > 15$. In other words, we also don't want the $\alpha$ in prior to be bigger than 15 with "large" probability to have too many occupied components. The probability of the tail event, $p(\alpha > 15)$, is set to be 0.1. We choose pairs of $(c,d)$'s according to that tail event probability.
+
+- Multiple density curves for $\alpha$
+
+```{r alpha_dens,out.width='60%', echo=FALSE}
+alpha_grid <- seq(from = 0.01, to = 30, by = 0.1)
+plot(alpha_grid,dgamma(alpha_grid, 1, rate = 0.15), type = "l", ylab = "density", col = "red")
+lines(alpha_grid,dgamma(alpha_grid, 2, rate = 0.26), col = "blue")
+lines(alpha_grid,dgamma(alpha_grid, 3, rate = 0.35), col = "purple")
+lines(alpha_grid,dgamma(alpha_grid, 5, rate = 0.53), col = "green")
+lines(alpha_grid,dgamma(alpha_grid, 11, rate = 1), col = "brown")
+lines(alpha_grid,dgamma(alpha_grid, 13, rate = 1.19), col = "black")
+legend("topright", legend=c("c=1,d=0.15",
+                            "c=2,d=0.26",
+                            "c=3,d=0.35",
+                            "c=5,d=0.53",
+                            "c=11,d=1",
+                            "c=13,d=1.19"),
+       col=c("red", "blue", "purple",
+             "green", "brown", "black"), lty=1, cex=0.8)
+```
+
+At first, we may have a coarse classification of those priors to be whether a parior has mode 0. Obviously, the choice $(c = 1, d = 0.15)$ gives a prior whose mode is 0 while the other choices do not. I will try to aviod putting a prior for $\alpha$ with mode 0 since any small enough $\alpha$ may make the MCMC chain stuck. From the remaining density curves, I will choose two configurations $(c = 3, d=0.35)$ and $(c = 11, d = 1)$. 
+
+## Design for Flexible Model
+
+In the prior of flexible model, we get two additional hyperparameters $df$ and $v_1$. The common parameters between constrained and flexible models are keep the same for the purpose of comparability.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ |c|c|c|c|c|c|c| } 
+\hline
+Parameter & $(v_0,ss_0)$ & $(g_1, g_2)$ & $(a, \sigma_0^2)$ &  $(c,d)$ & df & $v_1$\\
+\hline
+\multirow{3}{4em}{Value} & (2.13, 0.6) & (1, 4) & (0, 100) & (3, 0.35) & 3 &1.5 \\ 
+& (4, 1.75) & (0.5, 2) &  & (11, 1) & 12 & 3\\ 
+& (10, 6.2) &  &  &  & 22 &\\ 
+\hline
+\end{tabular}
+\caption{Design table for flexible model.}
+\end{table}
+
+- $v_1$ can be regarded as the amplification factor for prior variance of $(\sigma_{k_i}^2 | v_0, ss_0)$. Since we've already choose values for $v_0$, $v_1$ can be calculated correspondingly provided how much the amplification we want for the prior variance. It maybe reasonable that we want that prior variance in flexible model to be mainly 2 times the prior variance in constrained model. Following this, we choose $v_1 = 1.5, 3$.
+
+- $df = 3$ is the smallest interger value for making the flexible model indeed have larger prior variance (boundary case). Remaing choices are considered as ones that still make differences when comparing t-distribution and normal distribution.
+
+# Density Estimation and Prediction
+
+## Density Estimation
+After we set up different prior configurations, we can compare the posterior predictives to the holdout population data. Goodness of fit can be checked by the qqplot. We can also obtain a sampling distribution for the population sum from bayesian mixture models and see whether the sampling distribution cover the true value of population sum. Total number of iterations for one MCMC chain is set to be 100,000.
+
+```{r untrun, out.width='50%', echo=FALSE, fig.cap="Two qqplots of holdout population data against posterior predictions; The red line is the diagonal reference line and grey lines are samples from the posterior predictive distribution. Although the qqplot is one drawn under one of the simulation configurations, the issue here is obvious. Both mixture models under constrained prior and flexible prior have the ability to do the data extrapolation, which may generate perdictions that are extremely large."}
+load("~/Projects/DAfinal/untrunc.Rdata")
+acq.data.temp <- read.csv("~/Projects/DAfinal/acquisition.csv", header = FALSE, sep = "")$V1
+acq.data <- acq.data.temp[which(acq.data.temp > 0)]
+remove(acq.data.temp)
+get.logdata <- function(seed, rawdata = acq.data, size = 500) {
+  set.seed(seed)
+  ind <- sample(seq(rawdata), size)
+  return(list(data = log(rawdata[ind]),
+              index = ind))
+}
+one_qq <- function(fit, method) {
+  qq <- data.frame(prediction = sort(fit$pred[1280,]),
+                   population = sort(acq.data[-get.logdata(1)$index]))
+  qplt <- ggplot() + geom_line(data = qq, aes(x = population, y = prediction), color = "#999999") + theme(legend.position = "none") + theme(axis.text.x=element_blank())
+  for (j in c(1281:1289)) {
+    qq <- data.frame(prediction = sort(fit$pred[j,]),
+                   population = sort(acq.data[-get.logdata(1)$index]))
+    qplt <- qplt + geom_line(data = qq, aes(x = population, y = prediction), color = "#999999") + theme(legend.position = "none") +
+      theme(axis.text.x=element_blank())
+  }
+  qplt <- qplt + geom_abline(aes(slope = 1, intercept = 0,colour = "red")) + theme(legend.position = "none") + theme(plot.title = element_text(size=15, color = "black")) + theme(axis.text.x=element_blank()) + ggtitle(method)
+  return(qplt)
+}
+p1 <- one_qq(fitc, "constrained")
+p2 <- one_qq(fith, "flexible")
+qq <- ggpubr::ggarrange(
+  p1,p2, nrow = 1)
+qq
+```
+
+
+```{r untrun_sampling, out.width='50%', echo=FALSE, fig.cap="Box plots for the log of predictive sum and the predictive median. Red dots are the true value of the corresponding statistic from the holdout dataset. The predicted sum are heavyly affected by the extremely large predictions. But when we look at the boxplot for the predictive median, which is more robust to outliers compared to mean, the true value is actually clost to the median of those predictive medians."}
+cmean <- apply(fitc$pred[1201:1300,], 1, sum)
+fmean <- apply(fith$pred[1201:1300,], 1, sum)
+cm <- apply(fitc$pred[1001:1300,], 1, median)
+fm <- apply(fith$pred[1001:1300,], 1, median)
+bx <- data.frame(Prior = factor(rep(c("constrained", "flexible"), each = 100)),
+                 Value = c(log(cmean), log(fmean)))
+p <- ggplot(bx, aes(x=Prior, y=Value)) + 
+  geom_boxplot()
+p1 <- p + geom_point(data = data.frame(x = factor(c("constrained", "flexible")), y = c(log(sum(acq.data[-get.logdata(1)$index])), log(sum(acq.data[-get.logdata(1)$index])))),
+             aes(x=x, y=y),
+             color = 'red') + ggtitle("Posterior sum (log-scaled)")
+bx <- data.frame(Prior = factor(rep(c("constrained", "flexible"), each = 100)),
+                 Value = c((cm), (fm)))
+p <- ggplot(bx, aes(x=Prior, y=Value)) + 
+  geom_boxplot()
+p2 <- p + geom_point(data = data.frame(x = factor(c("constrained", "flexible")), y = c((median(acq.data[-get.logdata(1)$index])), (median(acq.data[-get.logdata(1)$index])))),
+             aes(x=x, y=y),
+             color = 'red') + ggtitle("Posterior median")
+qq <- ggpubr::ggarrange(
+  p1,p2, nrow = 1)
+qq
+```
+
+
+Since both of our nonparametric mixture models aim to model the whole population, we may add another assumption about the population (true values of the statements) and the observations (claimed values of the statements). If we assume that the claimed value is always greater than its corresponding true value, then the upper bound of all the observables can be our prior information about the upper bound for the predictions, therefore allowing us to do the truncated posterior predictions. The purpose for doing truncated predictions is also to downplay the impact of predicted outliers.
+
+```{r qplt_cons_sam1, out.width='50%', echo = FALSE, longtable = TRUE, warning=FALSE, cache=TRUE, fig.cap="Two sample QQ plot for different configurations with constrained model (fitted based on random sample 1); X-axis represents hold-out population data; Y-axis represents predictions; Subtitles represent different configurations, which can be referenced in appendix C."}
+load("~/Projects/DAfinal/cmodel_MCMC.Rdata")
+cmodel_conf <- as.character(c(1:12))
+one_qq <- function(config, fit, strg, sam) {
+  qq <- data.frame(pred = sort((fit[[config]]$fit[[sam]]$spred)),
+                   pop = sort((fit[[config]]$popdata[[sam]])))
+  qplt <- ggplot() + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") + theme(axis.text.x=element_blank())
+  for (j in c(10:24)) {
+    qq <- data.frame(pred = sort((fit[[config]]$fit[[sam]]$pred[j,])),
+                   pop = sort((fit[[config]]$popdata[[sam]])))
+    qplt <- qplt + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") +
+      theme(axis.text.x=element_blank())
+  }
+  qplt <- qplt + geom_abline(aes(slope = 1, intercept = 0,colour = "red"))+
+    ggtitle(strg[config]) + theme(legend.position = "none") + theme(plot.title = element_text(size=8, color = "blue")) + theme(axis.text.x=element_blank())
+  return(qplt)
+}
+
+qq <- ggpubr::ggarrange(
+  one_qq(1, cons_fit, cmodel_conf,1),
+  one_qq(2, cons_fit, cmodel_conf,1),
+  one_qq(3, cons_fit, cmodel_conf,1),
+  one_qq(4, cons_fit, cmodel_conf,1),
+  one_qq(5, cons_fit, cmodel_conf,1),
+  one_qq(6, cons_fit, cmodel_conf,1),
+  one_qq(7, cons_fit, cmodel_conf,1),
+  one_qq(8, cons_fit, cmodel_conf,1),
+  one_qq(9, cons_fit, cmodel_conf,1),
+  one_qq(10, cons_fit, cmodel_conf,1),
+  one_qq(11, cons_fit, cmodel_conf,1),
+  one_qq(12, cons_fit, cmodel_conf,1),
+  nrow = 3, ncol = 4)
+qq
+```
+
+
+To evaluate the goodness of fit for each different prior configurations, we use the test statistic related to the Kolmogorov–Smirnov test. We make use of our predictions and the holdout data to do a two sample K-S test. Two smaple K-S test measures the largest deviation among two empirical cumulative distribution function. Formally, the statistic $D$ is defined as 
+$$D = \sup_{x} |\hat{F}_1 (x) - \hat{F}_2 (X)|,$$ where $\hat{F}_1$ and $\hat{F}_2$ are two empirical distribution.
+
+Denote $d^{(j)}$ as the two sample K-S test statistic estimated at iteration j ($j = 1,...,M$). Then a way to compare the goodness of fit between models is to use the arithematic mean $\bar{d}$ among iterations.
+
+```{r kstable, echo = FALSE, warning=FALSE}
+ks <- function(fit, sam, npred, config) {
+  kss <- rep(NA, npred)
+  for (i in seq(npred)) {
+    kss[i] <- ks.test(sort((fit[[config]]$fit[[sam]]$pred[i,])), sort((fit[[config]]$popdata[[sam]])))$statistic
+  }
+  return(mean(kss))
+}
+
+kdf <- data.frame(
+  configuration = c(1:12),
+  np = round(c(ks(cons_fit, 1, 80, 1),
+         ks(cons_fit, 1, 80, 2),
+         ks(cons_fit, 1, 80, 3),
+         ks(cons_fit, 1, 80, 4),
+         ks(cons_fit, 1, 80, 5),
+         ks(cons_fit, 1, 80, 6),
+         ks(cons_fit, 1, 80, 7),
+         ks(cons_fit, 1, 80, 8),
+         ks(cons_fit, 1, 80, 9),
+         ks(cons_fit, 1, 80, 10),
+         ks(cons_fit, 1, 80, 11),
+         ks(cons_fit, 1, 80, 12)), 3),
+  kde = rep(0.052,12)
+)
+kable(kdf, "latex", caption = "KS test statistic for constrained prior; A smaller test statistic value means better fit.") %>%
+  kable_styling(latex_options = c("HOLD_position"))
+```
+
+
+```{r qplt_flex_sam1, out.width='50%', echo = FALSE, longtable = TRUE, warning=FALSE, cache=TRUE, fig.cap="Two sample QQ plot for different configurations with flexible model (fitted based on random sample 1); X-axis represents hold-out population data; Y-axis represents predictions; Subtitles represent different configurations, which can be referenced in appendix C."}
+load("~/Projects/DAfinal/fmodel_MCMC_p1.Rdata")
+cmodel_conf <- as.character(c(1,7,13,19,25,31,37,43,49,55,61,67))
+one_qq <- function(config, fit, strg, sam) {
+  qq <- data.frame(pred = sort((fit[[config]]$fit[[sam]]$pred[75,])),
+                   pop = sort((fit[[config]]$popdata[[sam]])))
+  qplt <- ggplot() + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") + theme(axis.text.x=element_blank())
+  for (j in c(76:88)) {
+    qq <- data.frame(pred = sort((fit[[config]]$fit[[sam]]$pred[j,])),
+                   pop = sort((fit[[config]]$popdata[[sam]])))
+    qplt <- qplt + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") +
+      theme(axis.text.x=element_blank())
+  }
+  qplt <- qplt + geom_abline(aes(slope = 1, intercept = 0,colour = "red")) + theme(legend.position = "none") + theme(plot.title = element_text(size=8, color = "blue")) + theme(axis.text.x=element_blank())
+  return(qplt)
+}
+
+ks <- function(fit, sam, npred, config) {
+  kss <- rep(NA, npred)
+  for (i in seq(npred)) {
+    kss[i] <- ks.test(sort((fit[[config]]$fit[[sam]]$pred[i,])), sort((fit[[config]]$popdata[[sam]])))$statistic
+  }
+  return(mean(kss))
+}
+
+p1 <- one_qq(1, flex_fit_p1, cmodel_conf,1) + ggtitle(cmodel_conf[1])
+p2 <- one_qq(7, flex_fit_p1, cmodel_conf,1) + ggtitle(cmodel_conf[2])
+k1 <- ks(flex_fit_p1, 1, 80, 1)
+k2 <- ks(flex_fit_p1, 1, 80, 7)
+remove(flex_fit_p1)
+load("~/Projects/DAfinal/fmodel_MCMC_p2.Rdata")
+p3 <- one_qq(1, flex_fit_p2, cmodel_conf,1) + ggtitle(cmodel_conf[3])
+p4 <- one_qq(7, flex_fit_p2, cmodel_conf,1) + ggtitle(cmodel_conf[4])
+k3 <- ks(flex_fit_p2, 1, 80, 1)
+k4 <- ks(flex_fit_p2, 1, 80, 7)
+remove(flex_fit_p2)
+load("~/Projects/DAfinal/fmodel_MCMC_p3.Rdata")
+p5 <- one_qq(1, flex_fit_p3, cmodel_conf,1) + ggtitle(cmodel_conf[5])
+p6 <- one_qq(7, flex_fit_p3, cmodel_conf,1) + ggtitle(cmodel_conf[6])
+k5 <- ks(flex_fit_p3, 1, 80, 1)
+k6 <- ks(flex_fit_p3, 1, 80, 7)
+remove(flex_fit_p3)
+load("~/Projects/DAfinal/fmodel_MCMC_p4.Rdata")
+p7 <- one_qq(1, flex_fit_p4, cmodel_conf,1) + ggtitle(cmodel_conf[7])
+p8 <- one_qq(7, flex_fit_p4, cmodel_conf,1) + ggtitle(cmodel_conf[8])
+k7 <- ks(flex_fit_p4, 1, 80, 1)
+k8 <- ks(flex_fit_p4, 1, 80, 7)
+remove(flex_fit_p4)
+load("~/Projects/DAfinal/fmodel_MCMC_p5.Rdata")
+p9 <- one_qq(1, flex_fit_p5, cmodel_conf,1) + ggtitle(cmodel_conf[9])
+p10 <- one_qq(7, flex_fit_p5, cmodel_conf,1) + ggtitle(cmodel_conf[10])
+k9 <- ks(flex_fit_p5, 1, 80, 1)
+k10 <- ks(flex_fit_p5, 1, 80, 7)
+remove(flex_fit_p5)
+load("~/Projects/DAfinal/fmodel_MCMC_p6.Rdata")
+p11 <- one_qq(1, flex_fit_p6, cmodel_conf,1) + ggtitle(cmodel_conf[11])
+p12 <- one_qq(7, flex_fit_p6, cmodel_conf,1) + ggtitle(cmodel_conf[12])
+k11 <- ks(flex_fit_p6, 1, 80, 1)
+k12 <- ks(flex_fit_p6, 1, 80, 7)
+remove(flex_fit_p6)
+qq <- ggpubr::ggarrange(
+  p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,
+  nrow = 3, ncol = 4)
+qq
+kdf <- data.frame(
+  configuration = c(1,7,13,19,25,31,37,43,49,55,61,67),
+  np = round(c(k1, k2,k3,k4,k5,k6,k7,k8,k9,k10,k11,k12),3),
+  kde = rep(0.052,12)
+)
+kable(kdf, "latex", caption = "KS test statistic for flexible prior; A smaller test statistic value means better fit.") %>%
+  kable_styling(latex_options = c("HOLD_position"))
+```
+
+After we do the truncated prediction, the posterior predictions of the population are more prone to lie on the referenced diagonal line, although biases existed there. QQplots for all different prior configurations in the constrained priors are shown. Since there are 72 different configurations in flexible prior, we will just show 12 of them in this section, while leaving some other plots from remaining configurations in appendix D. The choosen configurations with $(df = 3, v_1= 1.5)$ are the most "flexible" ones in terms of information from table 1, which have the smallest degrees of freedom and largest prior variance inflation factor. If we increase $df$ and $v_1$, we expect that the behavior of flexible priors will be more similar to that of constrained prior (see plot in appendix D).
+
+To compare methods, we also include the classic gaussian kernel density estimation, which is a method widely used in density estimation problem. Note that this frequntist method's estimation is fixed given the random sample, so that the K-S test statistics are all the same under the "kde" column. We can see from the K-S test statistic table, nonparametric bayesian mixture models give us a better density estimation, although one may argue that the actual difference in $\bar{d}$ is relatively smaller. That difference in terms of goodness of fit can be explained by the adaptivities in the component-specific variances introduced by the mixture model setup, while a kernel density estimator usually use a single bandwidth.
+
+## Prediction Performance
+
+In this subsection, we evaluate the ability to predicting the population sum under different methodology. Besides the bayesian approach described before, there are also many different methods for predicting/estimating the total sum of a data set given that we can only observe part of the population data. Using the sample mean to estimate the population mean is valid by central limit theorem. Also if we know the total number of records in a financial book, estimating the sum is equivalent in estimating the mean. We can also fit a finite mixture model using the EM algorithm and have predictions of population sum from that.
+
+```{r cons_risk_sam1,  echo = FALSE, out.width='70%', cache=TRUE, fig.cap="Prediction  boxplot for mixture model with constrained priors. Subtitles represent different configurations. Lables on X-axis are as follows: Bootstrapping(B); Nonparametric(N); KDE(K); Central limit theorem(C); Finite mixture model(F); True value(T)."}
+load("~/Projects/DAfinal/cmodel_mean.Rdata")
+load("~/Projects/DAfinal/bs_mean.Rdata")
+load("~/Projects/DAfinal/clt_mean.Rdata")
+load("~/Projects/DAfinal/fmm_mean.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p1.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p2.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p3.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p4.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p5.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p6.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p7.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p8.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p9.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p10.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p11.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p12.Rdata")
+cmodel_conf <- as.character(c(1:12))
+one_bxplt <- function(config, nppred, fmmp, bsp, cltp, strg) {
+  df1 <- data.frame(method = rep(NA, 6*500), value = rep(NA, 6*500))
+  df1$method[1:500] <- "T"
+  df1$value[1:500] <- nppred[[config]]$true*8983
+  df1$method[501:1000] <- "N"
+  df1$value[501:1000] <- nppred[[config]]$cpred*8983
+  df1$method[1001:1500] <- "K"
+  df1$value[1001:1500] <- flex_mean_p7[[1]]$kde*8983
+  df1$method[1501:2000] <- "C"
+  df1$value[1501:2000] <- cltp*8983
+  df1$method[2001:2500] <- "F"
+  df1$value[2001:2500] <- fmmp*8983
+  df1$method[2501:3000] <- "B"
+  df1$value[2501:3000] <- bsp*8983
+  p1 <- ggplot(df1, aes(x = method, y = value)) + geom_boxplot() + ggtitle(strg[config]) +
+    theme(plot.title = element_text(size=8, color = "blue"))
+  return(p1)
+}
+
+
+figure <- ggpubr::ggarrange(
+  one_bxplt(1,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt(2,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt(3,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt(4,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt(5,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt(6,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt(7,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt(8,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt(9,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt(10,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt(11,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt(12,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  nrow = 3, ncol = 4)
+figure
+```
+
+```{r flex_risk_sam1_p1,  echo = FALSE, out.width='70%', cache=TRUE, fig.cap="Prediction  boxplot for mixture model with flexible priors. Subtitles represent different configurations. Lables on X-axis are as follows: Bootstrapping(B); Nonparametric(N); KDE(K); Central limit theorem(C); Finite mixture model(F); True value(T)."}
+load("~/Projects/DAfinal/bs_mean.Rdata")
+load("~/Projects/DAfinal/clt_mean.Rdata")
+load("~/Projects/DAfinal/fmm_mean.Rdata")
+cmodel_conf <- as.character(c(1,7,13,19,25,31,37,43,49,55,61,67))
+one_bxplt <- function(config, nppred, fmmp, bsp, cltp) {
+  df1 <- data.frame(method = rep(NA, 500*6), value = rep(NA, 6*500))
+  df1$method[1:500] <- "T"
+  df1$value[1:500] <- nppred[[config]]$true*8983
+  df1$method[501:1000] <- "N"
+  df1$value[501:1000] <- nppred[[config]]$cpred*8983
+  df1$method[1001:1500] <- "K"
+  df1$value[1001:1500] <- flex_mean_p7[[1]]$kde*8983
+  df1$method[1501:2000] <- "C"
+  df1$value[1501:2000] <- cltp*8983
+  df1$method[2001:2500] <- "F"
+  df1$value[2001:2500] <- fmmp*8983
+  df1$method[2501:3000] <- "B"
+  df1$value[2501:3000] <- bsp*8983
+  p1 <- ggplot(df1, aes(x = method, y = value)) + geom_boxplot() +
+    theme(plot.title = element_text(size=8, color = "blue"))
+  return(p1)
+}
+
+p1 <- one_bxplt(1, flex_mean_p1, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[1])
+p2 <- one_bxplt(1, flex_mean_p2, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[2])
+p3 <- one_bxplt(1, flex_mean_p3, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[3])
+p4 <- one_bxplt(1, flex_mean_p4, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[4])
+p5 <- one_bxplt(1, flex_mean_p5, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[5])
+p6 <- one_bxplt(1, flex_mean_p6, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[6])
+p7 <- one_bxplt(1, flex_mean_p7, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[7])
+p8 <- one_bxplt(1, flex_mean_p8, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[8])
+p9 <- one_bxplt(1, flex_mean_p9, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[9])
+p10 <- one_bxplt(1, flex_mean_p10, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[10])
+p11 <- one_bxplt(1, flex_mean_p11, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[11])
+p12 <- one_bxplt(1, flex_mean_p12, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[12])
+qq <- ggpubr::ggarrange(
+  p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,
+  nrow = 3, ncol = 4)
+qq
+```
+
+Here besides the bayesian mixture model, every other methods are frequntist method and give us point estimates of the population sum. The sampling distribution of the point estimate is given by observing different random samples from the population. To evaluate the prediction procedure given by a nonparametric bayesian mixture models, we also use a point estimate of the predictive population sum given by the output from MCMC and use that to form another sampling distribution. The gibbs sampler for each configuration of prior is ran on 500 different simple random samples each with 100,000 iterations, through which we obtain 500 posterior means of the predictive population sums. 
+
+From the boxplot, we see that the point estimates for the sum from the nonparametric bayes method have relatively similar sampling distribution compared with sampling distribution of the sample mean. If we use the root mean square logarithmic error (RMSLE) to quantify the prediction error, where RMSLE $R$ for $n$ predictions is defined as
+$$R = \sqrt{\dfrac{\sum_{i =1}^{n}(log(pred^{(i)} + 1) - log(true^{(i)} + 1))^2}{n}}.$$
+
+The RMSLE's for predictive sums from bootstrapping, using the sample mean, fitting a finite mixture model by EM algorithm and kernel density estimation are 0.225, 0.169, 0.181 and 0.158 respectively.
+```{r rmse_cons, echo=FALSE}
+library(Metrics)
+n1 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[1]]$cpred*8983)
+n2 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[2]]$cpred*8983)
+n3 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[3]]$cpred*8983)
+n4 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[4]]$cpred*8983)
+n5 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[5]]$cpred*8983)
+n6 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[6]]$cpred*8983)
+n7 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[7]]$cpred*8983)
+n8 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[8]]$cpred*8983)
+n9 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[9]]$cpred*8983)
+n10 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[10]]$cpred*8983)
+n11 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[11]]$cpred*8983)
+n12 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[12]]$cpred*8983)
+k1 <- rmsle(flex_mean_p1[[1]]$true*8983, flex_mean_p7[[1]]$kde*8983)
+c1 <- rmsle(cons_mean[[1]]$true*8983, clt_mean*8983)
+crmse <- round(c(n1, n2, n3, n4, n5,n6, n7,n8, n9, n10, n11, n12),3)
+
+n1 <- rmsle(flex_mean_p1[[1]]$true*8983, flex_mean_p1[[1]]$cpred*8983)
+n2 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p2[[1]]$cpred*8983)
+n3 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p3[[1]]$cpred*8983)
+n4 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p4[[1]]$cpred*8983)
+n5 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p5[[1]]$cpred*8983)
+n6 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p6[[1]]$cpred*8983)
+n7 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p7[[1]]$cpred*8983)
+n8 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p8[[1]]$cpred*8983)
+n9 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p9[[1]]$cpred*8983)
+n10 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p10[[1]]$cpred*8983)
+n11 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p11[[1]]$cpred*8983)
+n12 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p12[[1]]$cpred*8983)
+k1 <- rmsle(flex_mean_p1[[1]]$true*8983, flex_mean_p7[[1]]$kde*8983)
+c1 <- rmsle(flex_mean_p1[[1]]$true*8983, clt_mean*8983)
+f1 <- rmsle(flex_mean_p1[[1]]$true*8983, fmm_mean*8983)
+b1 <- rmsle(flex_mean_p1[[1]]$true*8983, bs_mean*8983)
+frmse <- round(c(n1, n2, n3, n4, n5,n6, n7,n8, n9, n10, n11, n12),3)
+df <- data.frame(constrained  = crmse, flexible = frmse)
+kable(df, "latex", caption = "RMSLE table for bayesian mixture model.") %>%
+  kable_styling(latex_options = c("HOLD_position"))
+```
+
+From the RMSLE table, we see that mixture model with a flexible prior generally has lower prediction error. Whatever priors we specify, the bayesian mixture model beats the bootstrapping and at the same time, often has bigger prediction error compared to the other method.
+
+# Discussion
+
+In this work, we learn the distribution of commonly seen heavy-tailed data in audit using bayesian mixture models with stick breaking priors. Two different base distributions in the nonparametric prior are also discussed. Comparison between density estimates from nonparametric models and gaussian kernel density estimates tells us that by using models which allow adptiveness in the variance of each components in the mixture models, we end up with slightly better or similarly good density estimation for the imbalanced data. When we use nonparametric models to do predictions, our finding is that if we do not constrain the ability of extrapolation of the models, our estimates will be highly influenced by the outliers and thus impairs the prediction performance. However, if we incorporate the prior knowledge as the upper bound for predictions, the truncated predictions from all nonparametric methods in this work become more reasonable. Learning the density of the true value $T$ is only the very first step towards modeling the misstatements in audit. One also need, at least, a model about error generation from the true values to the claimed values. To better understand how different density estimation of true values $T$ will influence the inference of material misstatement, we need to further put the distribution of $T$, $P(T)$, into the "big picture". From there, we can explore how uncertainty from modeling true values $T$ can be propagated to predicting the underlying (hidden) true values given the claimed values $C$. Then, a more comprehensive view of our bayesian mixture models with stick breaking priors can be obtained.
+
+# Appendix A {-}
+
+- Generate two log-gamma random variables $A$ and $B$ ccording to Marsaglia and Tsang’s method[@Tsang], where $A \sim loggamma(\alpha, 1)$ and $B \sim loggamma(\beta, 1)$.
+
+- Denote $C = max(A, B)$, and calculate $A_2 = A - C$ and $B_2 = B - C$
+
+- To generate $beta(\alpha, \beta)$ random variables $V$, by definition, we generate its logrithm by calculating
+\begin{align*}
+log(\frac{e^A}{e^A + e^B}) & = A - log(e^A + e^B)\\&= A_2 + C - log(e^{A_2 + C} + e^{B_2 + C})\\&= A_2 + C - log(e^C (e^{A_2} + e^{B_2}))\\&= A_2 - log(e^{A_2} + e^{B_2})\\&= A_2 - log(1 + e^C),
+\end{align*}
+whose value is taken to be the value of $log(V)$. And by the same proof, we can also generate random variable $log(1-V)$ as $B_2 - log(1 + e^{C}).$By this strategy, we generate $log$ of $beta$ random variables which we can use them directly in the Gibbs sampling algorithm.
+
+# Appendix B {-}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ |l|l|l|l|l| }
+\hline
+\multicolumn{4}{ |c| }{Calculated prior information for $(\sigma_{k_i}^2 | v_0, v_1, ss_0)$} \\
+\hline
+Configuration & Prior &  mean & sd  \\ \hline
+\multirow{1}{*}{$(v_0 = 2.13, ss_0 = 0.6)$}
+ & constrained & 0.53 &  1.47  \\ \hline
+ \multirow{1}{*}{$(v_0 = 4, ss_0 = 1.75)$}
+ & constrained & 0.58 &  0.41  \\ \hline
+\multirow{1}{*}{$(v_0 = 10, ss_0 = 6.2)$}
+ & constrained & 0.69 & 0.24 \\ \hline
+\multirow{1}{*}{$(v_0 = 2.13, ss_0 = 0.6, v_1 = 1.5)$}
+& flexible & 0.53 & $1.47 \times 1.3$ \\ \hline
+\multirow{1}{*}{$(v_0 = 2.13, ss_0 = 0.6, v_1 = 3)$}
+& flexible & 0.53 & $1.47 \times 1.2$ \\ \hline
+\multirow{1}{*}{$(v_0 = 4, ss_0 = 1.75, v_1 = 1.5)$}
+& flexible & 0.58 & $0.41 \times 1.7$ \\ \hline
+\multirow{1}{*}{$(v_0 = 4, ss_0 = 1.75, v_1 = 3)$}
+& flexible & 0.58 & $0.41 \times 1.4$ \\ \hline
+\multirow{1}{*}{$(v_0 = 10, ss_0 = 6.2, v_1 = 1.5)$}
+& flexible & 0.69 & $0.24 \times 2.6$ \\ \hline
+\multirow{1}{*}{$(v_0 = 10, ss_0 = 6.2, v_1 = 3)$}
+& flexible & 0.69 & $0.24 \times 2$ \\ \hline
+\end{tabular}
+\caption{Calculated prior mean and sd for component-specific variance $\sigma_{k}^2$.}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ |l|l|l|l|l|l| }
+\hline
+\multicolumn{5}{ |c| }{Prior information for $\alpha$} \\
+\hline
+Configuration & prior mean &  prior sd & $P(\alpha > 15)$ & $E(N_{occ}|\alpha = prior \quad mean)$ \\ \hline
+\multirow{1}{*}{$(c=3, d=0.35)$}
+ & 8.6 & 4.9 &  0.1  & 36\\ \hline
+\multirow{1}{*}{$(c=11, d=1)$}
+ & 11.0 & 3.3 & 0.1 & 43\\ \hline
+\end{tabular}
+\caption{Prior information related to $\alpha$.}
+\end{table}
+
+# Appendix C {-}
+
+```{r expand_grid_cons, echo=FALSE}
+cdf <- data.frame(
+  configuration = c(1:12),
+  v0 = rep(c(2.13,4,10), each = 4),
+  ss0 = rep(c(0.6,1.75,6.2), each = 4),
+  a = rep(0, 12),
+  sigma_0 = rep(10, 12),
+  g1 = rep(c(1,1,0.5,0.5), 3),
+  g2 = rep(c(4,4,2,2), 3),
+  c = rep(c(3,11,3,11),3),
+  d = rep(c(.35,1,.35,1),3)
+)
+kable(cdf, "latex", booktabs = TRUE, caption = "Simulation table for constrained model.") %>%
+  kable_styling(latex_options = c("HOLD_position", "repeat_header"),font_size = 5)
+```
+
+
+```{r expand_grid_flex, echo=FALSE}
+dv <- expand.grid(df = c(3,12,22), v1 = c(1.5,3))
+
+fdf <- data.frame(
+  configuration = c(1:72),
+  v0 = rep(c(2.13,4,10), each = 24),
+  ss0 = rep(c(0.6,1.75,6.2), each = 24),
+  a = rep(0, 72),
+  sigma_0 = rep(10, 72),
+  g1 = rep(c(rep(1,12),rep(0.5,12)), 3),
+  g2 = rep(c(rep(4,12),rep(2,12)), 3),
+  c = rep(c(rep(3,6),rep(11,6)),6),
+  d = rep(c(rep(.35,6),rep(1,6)),6),
+  df = rep(dv$df, 12),
+  v1 = rep(dv$v1, 12)
+)
+
+kable(fdf, "latex", booktabs = TRUE, caption = "Simulation table for flexible model.") %>%
+  kable_styling(latex_options = c("HOLD_position", "repeat_header"),font_size = 5)
+
+```
+
+
+# Appendix D {-}
+
+```{r qplt_flex_sam1_1, out.width='50%', echo = FALSE, longtable = TRUE, warning=FALSE, cache=TRUE, fig.cap="Two sample QQ plot for different configurations with flexible model (fitted based on random sample 1); X-axis represents hold-out population data; Y-axis represents predictions; Subtitles represent different configurations, which can be referenced in appendix C. These configurations are with the largest degrees of freedom and largest v1."}
+load("~/Projects/DAfinal/fmodel_MCMC_p1.Rdata")
+cmodel_conf <- as.character(c(6,12,18,24,30,36,42,48,54,60,66, 72))
+one_qq <- function(config, fit, strg, sam) {
+  qq <- data.frame(pred = sort((fit[[config]]$fit[[sam]]$pred[75,])),
+                   pop = sort((fit[[config]]$popdata[[sam]])))
+  qplt <- ggplot() + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") + theme(axis.text.x=element_blank())
+  for (j in c(76:88)) {
+    qq <- data.frame(pred = sort((fit[[config]]$fit[[sam]]$pred[j,])),
+                   pop = sort((fit[[config]]$popdata[[sam]])))
+    qplt <- qplt + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") +
+      theme(axis.text.x=element_blank())
+  }
+  qplt <- qplt + geom_abline(aes(slope = 1, intercept = 0,colour = "red")) + theme(legend.position = "none") + theme(plot.title = element_text(size=8, color = "blue")) + theme(axis.text.x=element_blank())
+  return(qplt)
+}
+
+ks <- function(fit, sam, npred, config) {
+  kss <- rep(NA, npred)
+  for (i in seq(npred)) {
+    kss[i] <- ks.test(sort((fit[[config]]$fit[[sam]]$pred[i,])), sort((fit[[config]]$popdata[[sam]])))$statistic
+  }
+  return(mean(kss))
+}
+
+p1 <- one_qq(6, flex_fit_p1, cmodel_conf,1) + ggtitle(cmodel_conf[1])
+p2 <- one_qq(12, flex_fit_p1, cmodel_conf,1) + ggtitle(cmodel_conf[2])
+# k1 <- ks(flex_fit_p1, 1, 80, 1)
+# k2 <- ks(flex_fit_p1, 1, 80, 7)
+remove(flex_fit_p1)
+load("~/Projects/DAfinal/fmodel_MCMC_p2.Rdata")
+p3 <- one_qq(6, flex_fit_p2, cmodel_conf,1) + ggtitle(cmodel_conf[3])
+p4 <- one_qq(12, flex_fit_p2, cmodel_conf,1) + ggtitle(cmodel_conf[4])
+# k3 <- ks(flex_fit_p2, 1, 80, 1)
+# k4 <- ks(flex_fit_p2, 1, 80, 7)
+remove(flex_fit_p2)
+load("~/Projects/DAfinal/fmodel_MCMC_p3.Rdata")
+p5 <- one_qq(6, flex_fit_p3, cmodel_conf,1) + ggtitle(cmodel_conf[5])
+p6 <- one_qq(12, flex_fit_p3, cmodel_conf,1) + ggtitle(cmodel_conf[6])
+# k5 <- ks(flex_fit_p3, 1, 80, 1)
+# k6 <- ks(flex_fit_p3, 1, 80, 7)
+remove(flex_fit_p3)
+load("~/Projects/DAfinal/fmodel_MCMC_p4.Rdata")
+p7 <- one_qq(6, flex_fit_p4, cmodel_conf,1) + ggtitle(cmodel_conf[7])
+p8 <- one_qq(12, flex_fit_p4, cmodel_conf,1) + ggtitle(cmodel_conf[8])
+# k7 <- ks(flex_fit_p4, 1, 80, 1)
+# k8 <- ks(flex_fit_p4, 1, 80, 7)
+remove(flex_fit_p4)
+load("~/Projects/DAfinal/fmodel_MCMC_p5.Rdata")
+p9 <- one_qq(6, flex_fit_p5, cmodel_conf,1) + ggtitle(cmodel_conf[9])
+p10 <- one_qq(12, flex_fit_p5, cmodel_conf,1) + ggtitle(cmodel_conf[10])
+# k9 <- ks(flex_fit_p5, 1, 80, 1)
+# k10 <- ks(flex_fit_p5, 1, 80, 7)
+remove(flex_fit_p5)
+load("~/Projects/DAfinal/fmodel_MCMC_p6.Rdata")
+p11 <- one_qq(6, flex_fit_p6, cmodel_conf,1) + ggtitle(cmodel_conf[11])
+p12 <- one_qq(12, flex_fit_p6, cmodel_conf,1) + ggtitle(cmodel_conf[12])
+# k11 <- ks(flex_fit_p6, 1, 80, 1)
+# k12 <- ks(flex_fit_p6, 1, 80, 7)
+remove(flex_fit_p6)
+qq <- ggpubr::ggarrange(
+  p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,
+  nrow = 3, ncol = 4)
+qq
+```
+
+
+```{r flex_risk_sam1_p2,  echo = FALSE, out.width='70%', cache=TRUE, fig.cap="Prediction  boxplot for mixture model with flexible priors. Subtitles represent different configurations. Lables on X-axis are as follows: Bootstrapping(B); Nonparametric(N); KDE(K); Central limit theorem(C); Finite mixture model(F); True value(T)."}
+load("~/Projects/DAfinal/bs_mean.Rdata")
+load("~/Projects/DAfinal/clt_mean.Rdata")
+load("~/Projects/DAfinal/fmm_mean.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p1.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p2.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p3.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p4.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p5.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p6.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p7.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p8.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p9.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p10.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p11.Rdata")
+load("~/Projects/DAfinal/fmodel_mean_p12.Rdata")
+cmodel_conf <- as.character(c(6,12,18,24,30,36,42,48,54,60,66,72))
+one_bxplt <- function(config, nppred, fmmp, bsp, cltp) {
+  df1 <- data.frame(method = rep(NA, 500*6), value = rep(NA, 6*500))
+  df1$method[1:500] <- "T"
+  df1$value[1:500] <- nppred[[config]]$true*8983
+  df1$method[501:1000] <- "N"
+  df1$value[501:1000] <- nppred[[config]]$cpred*8983
+  df1$method[1001:1500] <- "K"
+  df1$value[1001:1500] <- flex_mean_p7[[1]]$kde*8983
+  df1$method[1501:2000] <- "C"
+  df1$value[1501:2000] <- cltp*8983
+  df1$method[2001:2500] <- "F"
+  df1$value[2001:2500] <- fmmp*8983
+  df1$method[2501:3000] <- "B"
+  df1$value[2501:3000] <- bsp*8983
+  p1 <- ggplot(df1, aes(x = method, y = value)) + geom_boxplot() +
+    theme(plot.title = element_text(size=8, color = "blue"))
+  return(p1)
+}
+
+p1 <- one_bxplt(6, flex_mean_p1, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[1])
+p2 <- one_bxplt(6, flex_mean_p2, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[2])
+p3 <- one_bxplt(6, flex_mean_p3, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[3])
+p4 <- one_bxplt(6, flex_mean_p4, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[4])
+p5 <- one_bxplt(6, flex_mean_p5, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[5])
+p6 <- one_bxplt(6, flex_mean_p6, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[6])
+p7 <- one_bxplt(6, flex_mean_p7, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[7])
+p8 <- one_bxplt(6, flex_mean_p8, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[8])
+p9 <- one_bxplt(6, flex_mean_p9, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[9])
+p10 <- one_bxplt(6, flex_mean_p10, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[10])
+p11 <- one_bxplt(6, flex_mean_p11, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[11])
+p12 <- one_bxplt(6, flex_mean_p12, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[12])
+qq <- ggpubr::ggarrange(
+  p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,
+  nrow = 3, ncol = 4)
+qq
+```
+
+# References
