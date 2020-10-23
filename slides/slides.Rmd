@@ -1,6 +1,6 @@
 ---
 title: "Distribution Fitting and Predictions"
-subtitle: "on Heavy Tailed Data in Audit"
+subtitle: "on Heavy Tailed Data in Audit using nonparametric bayes"
 author: Andy Zhai
 output: 
   beamer_presentation:
@@ -36,10 +36,10 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, fig.align = "center")
 
 ## Financial Audit
 
-- an independent examination of financial information of an entity[^aud]
-- an auditor is trying to understand a company's business and provides his or her own opinion on the financial statements
+- An independent examination of financial information of an entity[^aud]
+- An auditor is trying to understand a company's business and provides his or her own opinion on the financial statements
 
-### an audit table
+### Audit table
 
 - Are the claimed value reasonable?
 \only<1>{
@@ -58,13 +58,13 @@ a warehouse & $400,000$
 
 \only<2>{\begin{table}
 \begin{tabular}{l | c | c}
-item & claimed value(\$) & true value(\$) \\
+item & true value(\$) & claimed value(\$) \\
 \hline \hline
 a sketch pencil &  $1$ & $1$\\
 a spiral notebook &  $5$ & $5$\\
-an all-in-ones desktop &  $1,000$ & $990$\\
+an all-in-ones desktop & $990$ & $1,000$\\
 $\vdots$ & $\vdots$ & $\vdots$ \\
-a laptop &  $\textcolor{red}{20,000}$ & $\textcolor{blue}{2,000}$\\
+a laptop &  $\textcolor{blue}{2,000}$ & $\textcolor{red}{20,000}$\\
 a warehouse & $400,000$ & $400,000$
 \end{tabular}
 \end{table}
@@ -118,6 +118,8 @@ $$error = \sum_{i=1}^{n}(Y_i - X_i).$$
 
 ## Model an Audit Process (the big picture)
 
+Recall: $X$ true value, $Y$ claimed value.
+
 \vspace{10pt}
 
 * Model the true value $X$ based on samples of $X$.
@@ -125,15 +127,13 @@ $$error = \sum_{i=1}^{n}(Y_i - X_i).$$
 \vspace{6pt}
 * Model the claimed value $Y|X$.
 
-  * In the modeling phase, both $X$ and $Y$'s are observables.
-
 \vspace{6pt}
 * Make inference on $X|Y$.
 
 
 ### The auditor's work
 
-* Once the auditor has the model of $P(X)$ and $P(Y|X)$, and given a set of claimed values $\tilde{Y}$ ($X$ is not observable to the auditor), he or she can use $\tilde{Y}$ along with $X|Y$ to update their opinion about true values $X$ and then make inference on the error.
+* Once the auditor has the model of $P(X)$ and $P(Y|X)$, and given a set of claimed values $(y_1,y_2,...,y_n)$ ($X$ is not observable to the auditor), he or she can use $(y_1,y_2,...,y_n)$ along with $P(X|Y)$ to update the opinion about true values $X$ and then make inference on the error.
 
 <!-- ```{r diag} -->
 <!-- DiagrammeR::grViz(" -->
@@ -183,9 +183,9 @@ $$error = \sum_{i=1}^{n}(Y_i - X_i).$$
 
 * Model the true value $X$ by a bayesian approach.
 
- * $\lambda$: a vector of parameters.
- * $P(X|\lambda)$: a statistical model for data.
- * $\sum X$: inferencial target.
+  * $\lambda$: a vector of parameters.
+  * $P(X|\lambda)$: a statistical model for data.
+  * $\sum X$: inferencial target.
 
 <!-- ```{r diag2} -->
 <!-- DiagrammeR::grViz(" -->
@@ -208,13 +208,17 @@ $$error = \sum_{i=1}^{n}(Y_i - X_i).$$
 
 ### Steps
 
-* determine priors for $P(\lambda)$ and models for $P(X | \lambda)$;
+* Determine priors for $P(\lambda)$ and models for $P(X | \lambda)$;
 
 \vspace{3pt}
 
-* estimate the density of $X$ by $f(\tilde{x}|X) = \int f(\tilde{x}|\lambda)f(\lambda|X)d\lambda$; 
+* Derive posterior$P(\lambda|X)$;
 
-* get posterior predictions of $\sum \tilde{X}$ from $f(\tilde{x}|X)$;
+\vspace{3pt}
+
+* Estimate the density of $X$ by $f(\tilde{X}|X) = \int f(\tilde{X}|\lambda)f(\lambda|X)d\lambda$; 
+
+* Get posterior predictions of $\sum \tilde{X}$ from $f(\tilde{X}|X)$;
 
 \vspace{3pt}
 
@@ -235,24 +239,41 @@ $$error = \sum_{i=1}^{n}(Y_i - X_i).$$
 
 ## Challenge in Modelling the Audit Data
 
+### Bandwidth
+
 * Consider classical gaussian kernel density estimation
 $$\hat{f}_h(x) = \frac{1}{n} \sum_{i =1}^{n}\phi(\frac{x-x_i}{h})$$
 - single bandwidth $h$: not sufficient for introducing local adaptiveness, especially to the right tail (multiple bandwidths).
 
 \begin{figure}
   \centering
-  \includegraphics[scale = 0.31]{kdeqq_log.png}
+  \includegraphics[scale = 0.25]{kdeqq_log_1.png}
   \\
 \end{figure}
 
-## Priors and Models
+## Problems to solve
 \vspace{75pt}
 
-* $P(X|\lambda)$: lognormal mixture model
+* Estimate the density of the heavy-tailed financial data.
 
 \vspace{5pt}
 
-* $P(\lambda)$: dirichlet process
+* Make the density estimator compatible under bayesian hierachy.
+
+\vspace{5pt}
+
+* One solution: mixture model with multiple bandwidths.
+
+## Priors and Models
+
+\vspace{75pt}
+
+
+* Prior: $P(\lambda)$, dirichlet process
+
+\vspace{5pt}
+
+* Distribution of X: $P(X|\lambda)$,lognormal mixture model
 
 \vspace{5pt}
 
@@ -260,10 +281,21 @@ $$\hat{f}_h(x) = \frac{1}{n} \sum_{i =1}^{n}\phi(\frac{x-x_i}{h})$$
 
 ## $P(X|\lambda)$: the lognormal mixture model
 
-Let $X$ denote the sample from population let $Z = log(X)$. A normal mixture model for $Z$ can be written as
+* Let $X$ denote the sample of true values
+* Let $Z = log(X)$. A normal mixture model for $Z$ can be written as
 $$f(z| \mathbf{\pi}, \mathbf{\theta}) = \sum_{i = 1}^{m} \pi_{i} N(z|\theta_{i}),$$
-where $\theta_i = (\mu_i, \sigma_i^2 = \phi_{i}^{-1})$ and $m$ is total number of mixture's components.
 
+\vspace{5pt}
+
+* $m$: total number of mixture's components.
+
+\vspace{5pt}
+
+* $\theta_i = (\mu_i, \sigma_i^2 = \phi_{i}^{-1})$
+
+\vspace{5pt}
+
+* $\pi_i$: mixture components weight
 
 \vspace{5pt}
 
@@ -275,7 +307,7 @@ where $\theta_i = (\mu_i, \sigma_i^2 = \phi_{i}^{-1})$ and $m$ is total number o
 
 ## Determine $P(\lambda) =$ $P$(\boldmath$\theta$, \boldmath$\pi$)
 
-### Determine $P$(\boldmath$\pi$)
+### Determine $P$(\boldmath$\pi$): Stick-breaking prior
 
 \tikzset{every picture/.style={line width=0.75pt}}
 
@@ -326,13 +358,20 @@ where $\theta_i = (\mu_i, \sigma_i^2 = \phi_{i}^{-1})$ and $m$ is total number o
 
 - $V_i \sim Beta(1, \alpha)$
 \vspace{8pt}
-- stochastically decreasing sequence of probabilities $\pi$'s
+- Stochastically decreasing sequence of probabilities $\pi$'s
 \vspace{8pt}
-- after some step $s$, $\pi_j's$, $j \geq s$ negligible
+- After some step $s$, $\pi_j's$, $j \geq s$ negligible
+
+### Why stick-breaking?
+
+* Constructive definition of DP
+* Introduce an infinite mixture
+* Truncation approximation
+
 
 ## Determine $P$(\boldmath$\theta$ | \boldmath$\pi$)
 
-* laten variable \boldmath$K$; each $k_i \in \{1,...,N\}$ indexes a component in the mixture model,
+* Laten variable \boldmath$K$; each $k_i \in \{1,...,N\}$ indexes a component in the mixture model,
 $$Z_i | \theta, K \stackrel{ind}{\sim} N(\theta_{k_i}), \quad where \ \theta_{K_i} = (\mu_{k_i}, \sigma_{k_i}^2 =\phi_{k_i}^{-1})$$
 
 ### Two Choices of $P$(\boldmath$\theta$ | \boldmath$\pi$)
@@ -340,19 +379,17 @@ $$Z_i | \theta, K \stackrel{ind}{\sim} N(\theta_{k_i}), \quad where \ \theta_{K_
 \begin{columns}
 \column{0.5\textwidth}
 Normal-gamma (constrained) prior:
-{\small $\mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i} \sim N(\mu_0, (\kappa_0 \phi_{k_i})^{-1})$}
-{\small $\phi_{k_i} | v_0, ss_{0} \sim gamma({v_0}, {ss_0})$}
+{\small $$\mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i} \sim N(\mu_0, (\kappa_0 \phi_{k_i})^{-1})$$}
+{\small $$\phi_{k_i} | v_0, ss_{0} \sim gamma({v_0}, {ss_0})$$}
 \column{0.5\textwidth}
 T-betaprime (flexible) prior:
-{\small $\mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i}, df \sim T(\mu_0, (\kappa_0 \phi_{k_i})^{-1}, df)$}
-{\small $\phi_{k_i} | v_0, ss_{0}, v_1 \sim bp({v_0}, v_{1}, {ss_0}^{-1})$}
-$$\Updownarrow$$
-{\small $\mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i}, r_{k_i} \sim N(\mu_0, (\kappa_0 \phi_{k_i} r_{k_i})^{-1})$}
-{\small $r_{k_i} \sim gamma(\frac{df}{2}, \frac{df}{2})$}
-{\small $\phi_{k_i} | v_0, ss_{0}, h_{k_i} \sim gamma({v_0}, {ss_0}h_{k_i})$}
-{\small $h_{k_i} | v_1 \sim gamma(v_1, v_1)$}
-
+{\small $$\mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i}, df \sim T(\mu_0, (\kappa_0 \phi_{k_i})^{-1}, df)$$}
+{\small $$\phi_{k_i} | v_0, ss_{0}, v_1 \sim bp({v_0}, v_{1}, {ss_0}^{-1})$$}
 \end{columns}
+
+* T: $\mu_{k_i} | \mu_0, \kappa_{0}, \phi_{k_i}, r_{k_i} \sim N(\mu_0, (\kappa_0 \phi_{k_i} r_{k_i})^{-1}), \quad r_{k_i} \sim gamma\left(\frac{df}{2}, \frac{df}{2}\right).$
+
+* BP: $\phi_{k_i} | v_0, ss_{0}, h_{k_i} \sim gamma({v_0}, {ss_0}h_{k_i}),\quad h_{k_i} | v_1 \sim gamma(v_1, v_1).$
 
 <!-- \begin{equation*} -->
 <!-- \begin{aligned}[c] -->
@@ -385,32 +422,32 @@ $$\Updownarrow$$
 
 \begin{figure}
   \centering
-  \includegraphics[scale = 0.30]{table_screenshot.png}
+  \includegraphics[scale = 0.4]{table_screenshot.png}
   \\
 \end{figure}
 
-* shares the same prior mean for $\mu_{k_i}$ and $\sigma_{k_i}^2$
+* Share the same prior mean for $\mu_{k_i}$ and $\sigma_{k_i}^2$
 
-* flexible prior having larger prior variance in general
+* Flexible prior has larger prior variance in general
 
-* flexible prior having heavier tail
+* Flexible prior has heavier tail
 
 ## Data-based simulation study
 
-### experiment:
+### Experiment
 
 * Given 500 data from the population, we want to use those data to approximate nonparametric bayesian density estimates under different priors and predict the sum of the "holdout" population, then check the prediction performance.
 
-### implementation
+### Implementation
 
 * Blocked gibbs sampling method for stick-breaking prior (Ishwaran and James 2001)[^SB] with total number of iterations for each
 MCMC chain to be 100,000.
 
-### comparisions:
+### Comparisions
 
-* density estimation: QQ plots; KS goodness of fit test
+* Density estimation: QQ plots; KS goodness of fit test
 
-* prediction: root mean square logarithmic error (RMSLE) 
+* Prediction: root mean square logarithmic error (RMSLE) 
 
 [^SB]: http://people.ee.duke.edu/~lcarin/Yuting3.3.06.pdf
 
@@ -462,10 +499,10 @@ Parameter & $(v_0,ss_0)$ & $(g_1, g_2)$ & $(a, \sigma_0^2)$ &  $(c,d)$ & \textco
   \\
 \end{figure}
 
-* By the assumption of overstatement, truncated posterior predictions are made from the bayesian density estimates.
+* By the assumption $X_i \leq Y_i$, we truncate posterior predictions.
 
 
-## Posterior predictions
+## Posterior predictions with truncation
 
 ```{r t1, out.width='70%', echo=FALSE}
 load("~/Projects/DAfinal/untrunc.Rdata")
@@ -529,22 +566,55 @@ one_qq <- function(config, fit, strg, sam, method) {
 load("~/Projects/DAfinal/fmodel_MCMC_p5.Rdata")
 p9 <- one_qq(1, flex_fit_p5, cmodel_conf,1, "flexible (with truncation)")
 p10 <- one_qq(7, flex_fit_p5, cmodel_conf,1, "flexible (with truncation)")
+
+set.seed(1)
+ind <- sample(seq(length(acq.data)), 500)
+dens <- density(log(acq.data[ind]), from = 0)
+tkdepred <- matrix(NA, nrow = 10, ncol = 8983)
+for (j in seq(10)) {
+  for (i in seq(8983)) {
+  index <- sample(ind, 1)
+  acc <- 0
+  while (!acc) {
+    prop <- exp(rnorm(1, log(acq.data)[index], dens$bw))
+    if(prop <= max(acq.data)){
+      tkdepred[j,i] <- prop
+      acc <- 1}
+    else {}
+  }
+}
+}
+qq <- data.frame(pred = sort(tkdepred[1,]),
+                   pop = sort(acq.data[-ind]))
+  qplt <- ggplot() + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") + theme(axis.text.x=element_blank())
+  for (j in c(2:10)) {
+    qq <- data.frame(pred = sort(tkdepred[j,]),
+                   pop = sort(acq.data[-ind]))
+    qplt <- qplt + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") +
+      theme(axis.text.x=element_blank())
+  }
+  qplt1 <- qplt + geom_abline(aes(slope = 1, intercept = 0,colour = "red")) + theme(legend.position = "none") + theme(plot.title = element_text(size=15, color = "black")) + theme(axis.text.x=element_blank()) + ggtitle("kde(with truncation") + ylab("prediction") + xlab("population")
+
+
 qq <- ggpubr::ggarrange(
   p1, p2,
   p3, p9,
-  p4, p10,
-  nrow = 3, ncol = 2)
+  p4, p10, qplt1,
+  nrow = 4, ncol = 2)
 qq
 ```
 
+* Constrain the extrapolation
+
+* Similar to KDE with lognormal kernel
 
 ## Posterior prediction variability
 
-* targeting on point estimats of population sum, $\sum_{i}X_i$
+* Considering point estimats of predicted sum, $\sum_{i}\tilde{X_i}$
 
-* Predicted sum's are obtained through doing the experiment on 500 different simple random samples.
+* The experiments are done with 500 different simple random samples.
 
-```{r t2,  echo = FALSE, out.width='70%'}
+```{r t2,  echo = FALSE, out.width='58%', fig.cap="Selected boxplot for predicted sum. Lables on X-axis are: Bootstrapping(B); Nonparametric(N); KDE(K); Central limit theorem(C); Finite mixture model(F); True value(T)."}
 load("~/Projects/DAfinal/cmodel_mean.Rdata")
 load("~/Projects/DAfinal/bs_mean.Rdata")
 load("~/Projects/DAfinal/clt_mean.Rdata")
@@ -608,9 +678,23 @@ $$RMSLE = \sqrt{\dfrac{\sum_{i =1}^{n}(log(pred^{(i)}) - log(true^{(i)}))^2}{n}}
 
 \begin{figure}
   \centering
-  \includegraphics[scale = 0.43]{rmse.png}
+  \includegraphics[scale = 0.6]{rmse1.png}
   \\
 \end{figure}
+
+* T-betaprime prior yields smaller prediction error.
+
+## Density Plot Comparison 
+
+\begin{figure}
+  \centering
+\includegraphics[scale = 0.30]{kde_vs_np.png}
+  \\
+\end{figure}
+
+* Both nonparametric fittings smooth the tail
+
+* TB fittings "closer" to the benchmark
 
 ## Conclusion
 
@@ -619,4 +703,14 @@ $$RMSLE = \sqrt{\dfrac{\sum_{i =1}^{n}(log(pred^{(i)}) - log(true^{(i)}))^2}{n}}
 * Normal-gamma prior is compared with t-betaprime prior and t-betaprime prior fits the data better and leads to smaller prediction error.
 
 * By truncation, we can fix the extrapolation problem. In terms of point estimates of $\sum \tilde{X}$, our method mimics the behavior of using lognormal KDE, finite mixture of lognormals, and sample sum. But our method maintains the merit of being integrated into a bigger bayesian hierarchy. 
+
+
+## Backup
+  
+
+\begin{figure}
+  \centering
+\includegraphics[scale = 0.30]{kde_vs_np_1.png}
+  \\
+\end{figure}
 

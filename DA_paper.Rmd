@@ -15,7 +15,7 @@ header-includes:
 - \usepackage{tikz}
 - \usepackage[osf,sc]{mathpazo}
 - \floatplacement{figure}{H}
-abstract: 'Standard Bayesian analysis requires a family of parametric priors to be specified when fitting models and making inferences. This assumption leads to a substantial amount of work studying the uncertainty and sensitivity of the proposed parametric prior. In nonparametric Bayesian analysis, we are not constrained to assuming a certain family of parametric distributions. Instead, we can put a prior on different families of distributions, which is regarded as a flexible alternative to the standard Bayesian method. In this work, we estimate the density of a heavy-tailed dataset from Deloitte company using a nonparametric density estimation method. It is believed that the total sum of the recorded values in an audit book is closely related to the level of the misstatement if we can model the summation of true values behind them. Obtaining a reasonable density estimation of the true values will further assist us in detecting misstatements in financial audit activities. We approach the density estimation problem by using  stick-breaking priors, and develope two stick-breaking priors with different base measures. The connections and differences of those two priors are explored. We evaluate goodness of our fitting by comparing posterior predictive draws with our heavy tailed population data and compare sampling distributions of the inferential target, the sum of the true values, under various methods.'
+abstract: 'Standard Bayesian analysis requires a family of parametric priors to be specified when fitting models and making inferences. This assumption leads to a substantial amount of work studying the uncertainty and sensitivity of the proposed parametric prior. In nonparametric Bayesian analysis, we are not constrained to assuming a certain family of parametric distributions. Instead, we can put a prior on different families of distributions, which is regarded as a flexible alternative to the standard Bayesian method. In this work, we estimate the density of a heavy-tailed data set from Deloitte company using a nonparametric density estimation method. It is believed that the total sum of the recorded values in an audit book is closely related to the level of the misstatement if we can model the summation of true values behind them. Obtaining a reasonable density estimation of the true values will further assist us in detecting misstatements in financial audit activities. We approach the density estimation problem by using  stick-breaking priors, and develop two stick-breaking priors with different base measures. The connections and differences of those two priors are explored. We evaluate goodness of our fitting by comparing posterior predictive draws with our heavy tailed population data and compare sampling distributions of the inferential target, the sum of the true values, under various methods.'
 ---
 ```{r knitr-setup, echo = FALSE, message = FALSE}
 library(knitr)
@@ -62,7 +62,7 @@ remove(acq.data.temp)
 QQ1 <- data.frame(population = sort(acq.data))
 qplt1 <- ggplot(QQ1, aes(x=population)) + geom_histogram() + xlim(0, max(acq.data)+1) +
   scale_y_continuous(limits=c(0,500))
-qplt2 <- ggplot() + geom_boxplot(aes(y = log(acq.data))) + ylab("value")
+qplt2 <- ggplot(QQ1, aes(x=log(population))) + geom_histogram()
 qplt3 <- ggplot(QQ1, aes(log(population))) + geom_density(adjust = 1)
 set.seed(1)
 ind <- sample(seq(length(acq.data)), 500)
@@ -75,7 +75,7 @@ for (i in seq(8983)) {
 
 qplt4 <- ggplot() + geom_point(aes(x = sort(acq.data[-ind]), y = sort(kdepred))) + geom_abline(aes(slope = 1, intercept = 0,colour = "red")) + ylab("prediction") + xlab("population") + theme(legend.position = "none")
 qplt4 <- ggplot() + geom_density(aes(x = acq.data[ind]), adjust = 1) + xlab("population")
-p1<- ggpubr::ggarrange(qplt1, qplt2, qplt3, qplt4, nrow = 2, ncol = 2)
+p1<- ggpubr::ggarrange(qplt1, qplt4, qplt2, qplt3, nrow = 2, ncol = 2)
 p1
 ```
 
@@ -160,11 +160,11 @@ $$\alpha \sim gamma(c, d)$$
 \multicolumn{4}{ |c| }{Prior information} \\
 \hline
 Prior & Conditionals &  prior mean & prior variance \\ \hline
-\multirow{3}{*}{Normal-gamma}
+\multirow{3}{*}{Normal-gamma(Constrained)}
   & $(\mu_{k_i} | \mu_0, \kappa_0, \phi_{k_i})$ & $\mu_0$ & $\dfrac{1}{\kappa_0 \phi_{k_i}}$ \\
    & $(\mu_{k_i} | \mu_0, \kappa_0, v_0, ss_o)$ & $\mu_0$ & $\dfrac{ss_0}{\kappa_0 (v_0 -1)}$ \\
  & $(\sigma_{k_i}^2 | v_0, ss_0)$ & $\dfrac{ss_0}{v_0 -1}$ & $\dfrac{ss_0^2}{(v_0-1)^2(v_0 - 2)}$  \\ \hline
-\multirow{3}{*}{T-betaprime}
+\multirow{3}{*}{T-betaprime(Flexible)}
   & $(\mu_{k_i} | \mu_0, \kappa_0, \phi_{k_i}, df)$ & $\mu_0$ & $\dfrac{1}{\kappa_0 \phi_{k_i}} \times \dfrac{df}{df-2}$ \\
   & $(\mu_{k_i} | \mu_0, \kappa_0, v_0, ss_o, df, v_1)$ & $\mu_0$ & $\dfrac{ss_0}{\kappa_0 (v_0 -1)} \times \dfrac{df}{df-2}$ \\
  & $(\sigma_{k_i}^2 | v_0, v_1, ss_0)$ & $\dfrac{ss_0}{v_0 - 1}$ & $\dfrac{ss_0^2}{(v_0-1)^2(v_0 - 2)} \times \dfrac{v_1 + v_0 - 1}{v_1}$ \\ \hline
@@ -346,7 +346,7 @@ Above plot are the prior density plots for different paris of $(v_0, ss_0)$'s th
 
 - It might also be useful to think about the DP mixture as the Chinese resturant process [@Teh2010] with number of customers $n = 500$ and concentration parameter $\alpha$. To choose hyperparameter values for $c$ and $d$ in $\alpha \sim gamma(c, d)$, we first look at the distrubution of total number of nonempty tables obtained by Monte Carlo simulation.
 
-```{r long, out.width='60%', echo=FALSE, fig.cap="Density plots for number of occupied tables in the restraunt process with subtitiles representing different values in alpha."}
+```{r long, out.width='60%', echo=FALSE, fig.cap="Density plots for number of occupied tables in the restraunt process with subtitles representing different values in alpha."}
 include_graphics('~/Projects/DAfinal/DA-figures/long-1.png')
 ```
 
@@ -460,21 +460,35 @@ qq
 
 Since both of our nonparametric mixture models aim to model the whole population, we may add another assumption about the population (true values of the statements) and the observations (claimed values of the statements). If we assume that the claimed value is always greater than its corresponding true value, then the upper bound of all the observables can be our prior information about the upper bound for the predictions, therefore allowing us to do the truncated posterior predictions. The purpose for doing truncated predictions is also to downplay the impact of predicted outliers.
 
-```{r qplt_cons_sam1, out.width='50%', echo = FALSE, longtable = TRUE, warning=FALSE, cache=TRUE, fig.cap="Two sample QQ plot for different configurations with constrained model (fitted based on random sample 1); X-axis represents hold-out population data; Y-axis represents predictions; Subtitles represent different configurations, which can be referenced in appendix C."}
+```{r qplt_cons_sam1, out.width='70%', echo = FALSE, longtable = TRUE, warning=FALSE, cache=TRUE, fig.cap="Two sample QQ plot for different configurations with constrained model (fitted based on random sample 1); X-axis represents hold-out population data; Y-axis represents predictions; Subtitles represent different configurations, which can be referenced in appendix C."}
 load("~/Projects/DAfinal/cmodel_MCMC.Rdata")
 cmodel_conf <- as.character(c(1:12))
 one_qq <- function(config, fit, strg, sam) {
   qq <- data.frame(pred = sort((fit[[config]]$fit[[sam]]$spred)),
                    pop = sort((fit[[config]]$popdata[[sam]])))
-  qplt <- ggplot() + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") + theme(axis.text.x=element_blank())
+  qplt <- ggplot() + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none")  + theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
   for (j in c(10:24)) {
     qq <- data.frame(pred = sort((fit[[config]]$fit[[sam]]$pred[j,])),
                    pop = sort((fit[[config]]$popdata[[sam]])))
-    qplt <- qplt + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") +
-      theme(axis.text.x=element_blank())
+    qplt <- qplt + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") + theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
   }
   qplt <- qplt + geom_abline(aes(slope = 1, intercept = 0,colour = "red"))+
-    ggtitle(strg[config]) + theme(legend.position = "none") + theme(plot.title = element_text(size=8, color = "blue")) + theme(axis.text.x=element_blank())
+    ggtitle(strg[config]) + theme(legend.position = "none") + theme(plot.title = element_text(size=8, color = "blue")) + theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
   return(qplt)
 }
 
@@ -491,8 +505,11 @@ qq <- ggpubr::ggarrange(
   one_qq(10, cons_fit, cmodel_conf,1),
   one_qq(11, cons_fit, cmodel_conf,1),
   one_qq(12, cons_fit, cmodel_conf,1),
-  nrow = 3, ncol = 4)
-qq
+  nrow = 3, ncol = 4, legend = NULL)
+ggpubr::annotate_figure(qq,
+                bottom = ggpubr::text_grob("population"),
+                left = ggpubr::text_grob("prediction")
+)
 ```
 
 
@@ -501,107 +518,118 @@ $$D = \sup_{x} |\hat{F}_1 (x) - \hat{F}_2 (X)|,$$ where $\hat{F}_1$ and $\hat{F}
 
 Denote $d^{(j)}$ as the two sample K-S test statistic estimated at iteration j ($j = 1,...,M$). Then a way to compare the goodness of fit between models is to use the arithematic mean $\bar{d}$ among iterations.
 
-```{r kstable, echo = FALSE, warning=FALSE}
-ks <- function(fit, sam, npred, config) {
-  kss <- rep(NA, npred)
-  for (i in seq(npred)) {
-    kss[i] <- ks.test(sort((fit[[config]]$fit[[sam]]$pred[i,])), sort((fit[[config]]$popdata[[sam]])))$statistic
-  }
-  return(mean(kss))
-}
 
-kdf <- data.frame(
-  configuration = c(1:12),
-  np = round(c(ks(cons_fit, 1, 80, 1),
-         ks(cons_fit, 1, 80, 2),
-         ks(cons_fit, 1, 80, 3),
-         ks(cons_fit, 1, 80, 4),
-         ks(cons_fit, 1, 80, 5),
-         ks(cons_fit, 1, 80, 6),
-         ks(cons_fit, 1, 80, 7),
-         ks(cons_fit, 1, 80, 8),
-         ks(cons_fit, 1, 80, 9),
-         ks(cons_fit, 1, 80, 10),
-         ks(cons_fit, 1, 80, 11),
-         ks(cons_fit, 1, 80, 12)), 3),
-  kde = rep(0.052,12)
-)
-kable(kdf, "latex", caption = "KS test statistic for constrained prior; A smaller test statistic value means better fit.") %>%
-  kable_styling(latex_options = c("HOLD_position"))
-```
+\begin{table}[H]
+\centering
+\begin{tabular}{ |c|c|c|c| } 
+ \hline
+ parameter (within parenthesis are those in TB prior) & NG & TB & kde \\ 
+ \hline
+ $v_0 = 2.13, ss_0=0.6,g_1=1,g_2=4,c=3,d=0.35,(df=3,v_1=1.5)$ & 0.047 & 0.044 & 0.052\\ 
+ $v_0 = 2.13, ss_0=0.6,g_1=1,g_2=4,c=11,d=1,(df=3,v_1=1.5)$ & 0.045 & 0.046 & 0.052\\
+ $v_0 = 2.13, ss_0=0.6,g_1=0.5,g_2=2,c=3,d=0.35,(df=3,v_1=1.5)$ & 0.049 & 0.049 & 0.052\\
+ $v_0 = 2.13, ss_0=0.6,g_1=0.5,g_2=2,c=11,d=1,(df=3,v_1=1.5)$ & 0.048 & 0.046 & 0.052\\
+ $v_0 = 4, ss_0=1.75,g_1=1,g_2=4,c=3,d=0.35,(df=3,v_1=1.5)$ & 0.048 & 0.047 & 0.052\\
+ $v_0 = 4, ss_0=1.75,g_1=1,g_2=4,c=11,d=1,(df=3,v_1=1.5)$ & 0.050 & 0.047 & 0.052\\
+ $v_0 = 4, ss_0=1.75,g_1=0.5,g_2=2,c=3,d=0.35,(df=3,v_1=1.5)$ & 0.050 & 0.047 & 0.052\\
+ $v_0 = 4, ss_0=1.75,g_1=0.5,g_2=2,c=11,d=1,(df=3,v_1=1.5)$ & 0.051 & 0.050 & 0.052\\
+ $v_0 = 10, ss_0=6.2,g_1=1,g_2=4,c=3,d=0.35,(df=3,v_1=1.5)$ & 0.049 & 0.044 & 0.052\\
+ $v_0 = 10, ss_0=6.2,g_1=1,g_2=4,c=11,d=1,(df=3,v_1=1.5)$ & 0.050 & 0.044 & 0.052\\
+ $v_0 = 10, ss_0=6.2,g_1=0.5,g_2=2,c=3,d=0.35,(df=3,v_1=1.5)$ & 0.049 & 0.044 & 0.052\\
+ $v_0 = 10, ss_0=6.2,g_1=0.5,g_2=2,c=11,d=1,(df=3,v_1=1.5)$ & 0.050 & 0.046 & 0.052\\ 
+ \hline
+\end{tabular}
+\caption{KS test statistic table; A smaller test statistic value means better fit. NG stands for normal-gamma prior and TB stands for t-betaprime prior.}
+\end{table}
 
 
-```{r qplt_flex_sam1, out.width='50%', echo = FALSE, longtable = TRUE, warning=FALSE, cache=TRUE, fig.cap="Two sample QQ plot for different configurations with flexible model (fitted based on random sample 1); X-axis represents hold-out population data; Y-axis represents predictions; Subtitles represent different configurations, which can be referenced in appendix C."}
+```{r qplt_flex_sam1, out.width='70%', echo = FALSE, longtable = TRUE, warning=FALSE, cache=TRUE, fig.cap="Two sample QQ plot for different configurations with flexible model (fitted based on random sample 1); X-axis represents hold-out population data; Y-axis represents predictions; Subtitles represent different configurations, which can be referenced in appendix C."}
 load("~/Projects/DAfinal/fmodel_MCMC_p1.Rdata")
 cmodel_conf <- as.character(c(1,7,13,19,25,31,37,43,49,55,61,67))
 one_qq <- function(config, fit, strg, sam) {
   qq <- data.frame(pred = sort((fit[[config]]$fit[[sam]]$pred[75,])),
                    pop = sort((fit[[config]]$popdata[[sam]])))
-  qplt <- ggplot() + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") + theme(axis.text.x=element_blank())
+  qplt <- ggplot() + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") + theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
   for (j in c(76:88)) {
     qq <- data.frame(pred = sort((fit[[config]]$fit[[sam]]$pred[j,])),
                    pop = sort((fit[[config]]$popdata[[sam]])))
-    qplt <- qplt + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") +
-      theme(axis.text.x=element_blank())
+    qplt <- qplt + geom_line(data = qq, aes(x = pop, y = pred), color = "#999999") + theme(legend.position = "none") + theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
   }
-  qplt <- qplt + geom_abline(aes(slope = 1, intercept = 0,colour = "red")) + theme(legend.position = "none") + theme(plot.title = element_text(size=8, color = "blue")) + theme(axis.text.x=element_blank())
+  qplt <- qplt + geom_abline(aes(slope = 1, intercept = 0,colour = "red")) + theme(legend.position = "none") + theme(plot.title = element_text(size=8, color = "blue")) + theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
   return(qplt)
 }
 
-ks <- function(fit, sam, npred, config) {
-  kss <- rep(NA, npred)
-  for (i in seq(npred)) {
-    kss[i] <- ks.test(sort((fit[[config]]$fit[[sam]]$pred[i,])), sort((fit[[config]]$popdata[[sam]])))$statistic
-  }
-  return(mean(kss))
-}
+# ks <- function(fit, sam, npred, config) {
+#   kss <- rep(NA, npred)
+#   for (i in seq(npred)) {
+#     kss[i] <- ks.test(sort((fit[[config]]$fit[[sam]]$pred[i,])), sort((fit[[config]]$popdata[[sam]])))$statistic
+#   }
+#   return(mean(kss))
+# }
 
 p1 <- one_qq(1, flex_fit_p1, cmodel_conf,1) + ggtitle(cmodel_conf[1])
 p2 <- one_qq(7, flex_fit_p1, cmodel_conf,1) + ggtitle(cmodel_conf[2])
-k1 <- ks(flex_fit_p1, 1, 80, 1)
-k2 <- ks(flex_fit_p1, 1, 80, 7)
+# k1 <- ks(flex_fit_p1, 1, 80, 1)
+# k2 <- ks(flex_fit_p1, 1, 80, 7)
 remove(flex_fit_p1)
 load("~/Projects/DAfinal/fmodel_MCMC_p2.Rdata")
 p3 <- one_qq(1, flex_fit_p2, cmodel_conf,1) + ggtitle(cmodel_conf[3])
 p4 <- one_qq(7, flex_fit_p2, cmodel_conf,1) + ggtitle(cmodel_conf[4])
-k3 <- ks(flex_fit_p2, 1, 80, 1)
-k4 <- ks(flex_fit_p2, 1, 80, 7)
+# k3 <- ks(flex_fit_p2, 1, 80, 1)
+# k4 <- ks(flex_fit_p2, 1, 80, 7)
 remove(flex_fit_p2)
 load("~/Projects/DAfinal/fmodel_MCMC_p3.Rdata")
 p5 <- one_qq(1, flex_fit_p3, cmodel_conf,1) + ggtitle(cmodel_conf[5])
 p6 <- one_qq(7, flex_fit_p3, cmodel_conf,1) + ggtitle(cmodel_conf[6])
-k5 <- ks(flex_fit_p3, 1, 80, 1)
-k6 <- ks(flex_fit_p3, 1, 80, 7)
+# k5 <- ks(flex_fit_p3, 1, 80, 1)
+# k6 <- ks(flex_fit_p3, 1, 80, 7)
 remove(flex_fit_p3)
 load("~/Projects/DAfinal/fmodel_MCMC_p4.Rdata")
 p7 <- one_qq(1, flex_fit_p4, cmodel_conf,1) + ggtitle(cmodel_conf[7])
 p8 <- one_qq(7, flex_fit_p4, cmodel_conf,1) + ggtitle(cmodel_conf[8])
-k7 <- ks(flex_fit_p4, 1, 80, 1)
-k8 <- ks(flex_fit_p4, 1, 80, 7)
+# k7 <- ks(flex_fit_p4, 1, 80, 1)
+# k8 <- ks(flex_fit_p4, 1, 80, 7)
 remove(flex_fit_p4)
 load("~/Projects/DAfinal/fmodel_MCMC_p5.Rdata")
 p9 <- one_qq(1, flex_fit_p5, cmodel_conf,1) + ggtitle(cmodel_conf[9])
 p10 <- one_qq(7, flex_fit_p5, cmodel_conf,1) + ggtitle(cmodel_conf[10])
-k9 <- ks(flex_fit_p5, 1, 80, 1)
-k10 <- ks(flex_fit_p5, 1, 80, 7)
+# k9 <- ks(flex_fit_p5, 1, 80, 1)
+# k10 <- ks(flex_fit_p5, 1, 80, 7)
 remove(flex_fit_p5)
 load("~/Projects/DAfinal/fmodel_MCMC_p6.Rdata")
 p11 <- one_qq(1, flex_fit_p6, cmodel_conf,1) + ggtitle(cmodel_conf[11])
 p12 <- one_qq(7, flex_fit_p6, cmodel_conf,1) + ggtitle(cmodel_conf[12])
-k11 <- ks(flex_fit_p6, 1, 80, 1)
-k12 <- ks(flex_fit_p6, 1, 80, 7)
+# k11 <- ks(flex_fit_p6, 1, 80, 1)
+# k12 <- ks(flex_fit_p6, 1, 80, 7)
 remove(flex_fit_p6)
 qq <- ggpubr::ggarrange(
   p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,
   nrow = 3, ncol = 4)
-qq
-kdf <- data.frame(
-  configuration = c(1,7,13,19,25,31,37,43,49,55,61,67),
-  np = round(c(k1, k2,k3,k4,k5,k6,k7,k8,k9,k10,k11,k12),3),
-  kde = rep(0.052,12)
-)
-kable(kdf, "latex", caption = "KS test statistic for flexible prior; A smaller test statistic value means better fit.") %>%
-  kable_styling(latex_options = c("HOLD_position"))
+ggpubr::annotate_figure(qq,
+                bottom = ggpubr::text_grob("population"),
+                left = ggpubr::text_grob("prediction"))
+# kdf <- data.frame(
+#   configuration = c(1,7,13,19,25,31,37,43,49,55,61,67),
+#   np = round(c(k1, k2,k3,k4,k5,k6,k7,k8,k9,k10,k11,k12),3),
+#   kde = rep(0.052,12)
+# )
+# kable(kdf, "latex", caption = "KS test statistic for flexible prior; A smaller test statistic value means better fit.") %>%
+#   kable_styling(latex_options = c("HOLD_position"))
 ```
 
 After we do the truncated prediction, the posterior predictions of the population are more prone to lie on the referenced diagonal line, although biases existed there. QQplots for all different prior configurations in the constrained priors are shown. Since there are 72 different configurations in flexible prior, we will just show 12 of them in this section, while leaving some other plots from remaining configurations in appendix D. The choosen configurations with $(df = 3, v_1= 1.5)$ are the most "flexible" ones in terms of information from table 1, which have the smallest degrees of freedom and largest prior variance inflation factor. If we increase $df$ and $v_1$, we expect that the behavior of flexible priors will be more similar to that of constrained prior (see plot in appendix D).
@@ -630,7 +658,7 @@ load("~/Projects/DAfinal/fmodel_mean_p10.Rdata")
 load("~/Projects/DAfinal/fmodel_mean_p11.Rdata")
 load("~/Projects/DAfinal/fmodel_mean_p12.Rdata")
 cmodel_conf <- as.character(c(1:12))
-one_bxplt <- function(config, nppred, fmmp, bsp, cltp, strg) {
+one_bxplt1 <- function(config, nppred, fmmp, bsp, cltp, strg) {
   df1 <- data.frame(method = rep(NA, 6*500), value = rep(NA, 6*500))
   df1$method[1:500] <- "T"
   df1$value[1:500] <- nppred[[config]]$true*8983
@@ -645,26 +673,74 @@ one_bxplt <- function(config, nppred, fmmp, bsp, cltp, strg) {
   df1$method[2501:3000] <- "B"
   df1$value[2501:3000] <- bsp*8983
   p1 <- ggplot(df1, aes(x = method, y = value)) + geom_boxplot() + ggtitle(strg[config]) +
-    theme(plot.title = element_text(size=8, color = "blue"))
+    theme(plot.title = element_text(size=8, color = "blue")) + theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank())
+  return(p1)
+}
+
+one_bxplt2 <- function(config, nppred, fmmp, bsp, cltp, strg) {
+  df1 <- data.frame(method = rep(NA, 6*500), value = rep(NA, 6*500))
+  df1$method[1:500] <- "T"
+  df1$value[1:500] <- nppred[[config]]$true*8983
+  df1$method[501:1000] <- "N"
+  df1$value[501:1000] <- nppred[[config]]$cpred*8983
+  df1$method[1001:1500] <- "K"
+  df1$value[1001:1500] <- flex_mean_p7[[1]]$kde*8983
+  df1$method[1501:2000] <- "C"
+  df1$value[1501:2000] <- cltp*8983
+  df1$method[2001:2500] <- "F"
+  df1$value[2001:2500] <- fmmp*8983
+  df1$method[2501:3000] <- "B"
+  df1$value[2501:3000] <- bsp*8983
+  p1 <- ggplot(df1, aes(x = method, y = value)) + geom_boxplot() + ggtitle(strg[config]) +
+    theme(plot.title = element_text(size=8, color = "blue")) + theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
   return(p1)
 }
 
 
+one_bxplt4 <- function(config, nppred, fmmp, bsp, cltp, strg) {
+  df1 <- data.frame(method = rep(NA, 6*500), value = rep(NA, 6*500))
+  df1$method[1:500] <- "T"
+  df1$value[1:500] <- nppred[[config]]$true*8983
+  df1$method[501:1000] <- "N"
+  df1$value[501:1000] <- nppred[[config]]$cpred*8983
+  df1$method[1001:1500] <- "K"
+  df1$value[1001:1500] <- flex_mean_p7[[1]]$kde*8983
+  df1$method[1501:2000] <- "C"
+  df1$value[1501:2000] <- cltp*8983
+  df1$method[2001:2500] <- "F"
+  df1$value[2001:2500] <- fmmp*8983
+  df1$method[2501:3000] <- "B"
+  df1$value[2501:3000] <- bsp*8983
+  p1 <- ggplot(df1, aes(x = method, y = value)) + geom_boxplot() + ggtitle(strg[config]) +
+    theme(plot.title = element_text(size=8, color = "blue")) + theme(axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank())
+  return(p1)
+}
+
 figure <- ggpubr::ggarrange(
-  one_bxplt(1,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
-  one_bxplt(2,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
-  one_bxplt(3,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
-  one_bxplt(4,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
-  one_bxplt(5,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
-  one_bxplt(6,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
-  one_bxplt(7,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
-  one_bxplt(8,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
-  one_bxplt(9,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
-  one_bxplt(10,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
-  one_bxplt(11,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
-  one_bxplt(12,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt1(1,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt2(2,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt2(3,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt2(4,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt1(5,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt2(6,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt2(7,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt2(8,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt4(9,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt4(10,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt4(11,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
+  one_bxplt4(12,cons_mean, fmm_mean, bs_mean, clt_mean, cmodel_conf),
   nrow = 3, ncol = 4)
-figure
+ggpubr::annotate_figure(figure,
+                bottom = ggpubr::text_grob("method"))
 ```
 
 ```{r flex_risk_sam1_p1,  echo = FALSE, out.width='70%', cache=TRUE, fig.cap="Prediction  boxplot for mixture model with flexible priors. Subtitles represent different configurations. Lables on X-axis are as follows: Bootstrapping(B); Nonparametric(N); KDE(K); Central limit theorem(C); Finite mixture model(F); True value(T)."}
@@ -672,7 +748,7 @@ load("~/Projects/DAfinal/bs_mean.Rdata")
 load("~/Projects/DAfinal/clt_mean.Rdata")
 load("~/Projects/DAfinal/fmm_mean.Rdata")
 cmodel_conf <- as.character(c(1,7,13,19,25,31,37,43,49,55,61,67))
-one_bxplt <- function(config, nppred, fmmp, bsp, cltp) {
+one_bxplt1 <- function(config, nppred, fmmp, bsp, cltp) {
   df1 <- data.frame(method = rep(NA, 500*6), value = rep(NA, 6*500))
   df1$method[1:500] <- "T"
   df1$value[1:500] <- nppred[[config]]$true*8983
@@ -687,73 +763,123 @@ one_bxplt <- function(config, nppred, fmmp, bsp, cltp) {
   df1$method[2501:3000] <- "B"
   df1$value[2501:3000] <- bsp*8983
   p1 <- ggplot(df1, aes(x = method, y = value)) + geom_boxplot() +
-    theme(plot.title = element_text(size=8, color = "blue"))
+    theme(plot.title = element_text(size=8, color = "blue"))+ theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank())
   return(p1)
 }
 
-p1 <- one_bxplt(1, flex_mean_p1, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[1])
-p2 <- one_bxplt(1, flex_mean_p2, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[2])
-p3 <- one_bxplt(1, flex_mean_p3, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[3])
-p4 <- one_bxplt(1, flex_mean_p4, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[4])
-p5 <- one_bxplt(1, flex_mean_p5, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[5])
-p6 <- one_bxplt(1, flex_mean_p6, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[6])
-p7 <- one_bxplt(1, flex_mean_p7, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[7])
-p8 <- one_bxplt(1, flex_mean_p8, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[8])
-p9 <- one_bxplt(1, flex_mean_p9, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[9])
-p10 <- one_bxplt(1, flex_mean_p10, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[10])
-p11 <- one_bxplt(1, flex_mean_p11, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[11])
-p12 <- one_bxplt(1, flex_mean_p12, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[12])
+one_bxplt2 <- function(config, nppred, fmmp, bsp, cltp) {
+  df1 <- data.frame(method = rep(NA, 500*6), value = rep(NA, 6*500))
+  df1$method[1:500] <- "T"
+  df1$value[1:500] <- nppred[[config]]$true*8983
+  df1$method[501:1000] <- "N"
+  df1$value[501:1000] <- nppred[[config]]$cpred*8983
+  df1$method[1001:1500] <- "K"
+  df1$value[1001:1500] <- flex_mean_p7[[1]]$kde*8983
+  df1$method[1501:2000] <- "C"
+  df1$value[1501:2000] <- cltp*8983
+  df1$method[2001:2500] <- "F"
+  df1$value[2001:2500] <- fmmp*8983
+  df1$method[2501:3000] <- "B"
+  df1$value[2501:3000] <- bsp*8983
+  p1 <- ggplot(df1, aes(x = method, y = value)) + geom_boxplot() +
+    theme(plot.title = element_text(size=8, color = "blue"))+ theme(axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank())
+  return(p1)
+}
+
+p1 <- one_bxplt1(1, flex_mean_p1, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[1])
+p2 <- one_bxplt1(1, flex_mean_p2, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[2])
+p3 <- one_bxplt1(1, flex_mean_p3, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[3])
+p4 <- one_bxplt1(1, flex_mean_p4, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[4])
+p5 <- one_bxplt1(1, flex_mean_p5, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[5])
+p6 <- one_bxplt1(1, flex_mean_p6, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[6])
+p7 <- one_bxplt1(1, flex_mean_p7, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[7])
+p8 <- one_bxplt1(1, flex_mean_p8, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[8])
+p9 <- one_bxplt2(1, flex_mean_p9, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[9])
+p10 <- one_bxplt2(1, flex_mean_p10, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[10])
+p11 <- one_bxplt2(1, flex_mean_p11, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[11])
+p12 <- one_bxplt2(1, flex_mean_p12, fmm_mean, bs_mean, clt_mean) + ggtitle(cmodel_conf[12])
 qq <- ggpubr::ggarrange(
   p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,
   nrow = 3, ncol = 4)
-qq
+ggpubr::annotate_figure(qq,
+                bottom = ggpubr::text_grob("method"))
 ```
 
 Here besides the bayesian mixture model, every other methods are frequntist method and give us point estimates of the population sum. The sampling distribution of the point estimate is given by observing different random samples from the population. To evaluate the prediction procedure given by a nonparametric bayesian mixture models, we also use a point estimate of the predictive population sum given by the output from MCMC and use that to form another sampling distribution. The gibbs sampler for each configuration of prior is ran on 500 different simple random samples each with 100,000 iterations, through which we obtain 500 posterior means of the predictive population sums. 
 
 From the boxplot, we see that the point estimates for the sum from the nonparametric bayes method have relatively similar sampling distribution compared with sampling distribution of the sample mean. If we use the root mean square logarithmic error (RMSLE) to quantify the prediction error, where RMSLE $R$ for $n$ predictions is defined as
-$$R = \sqrt{\dfrac{\sum_{i =1}^{n}(log(pred^{(i)} + 1) - log(true^{(i)} + 1))^2}{n}}.$$
+$$R = \sqrt{\dfrac{\sum_{i =1}^{n}(log(pred^{(i)}) - log(true^{(i)}))^2}{n}}.$$
 
 The RMSLE's for predictive sums from bootstrapping, using the sample mean, fitting a finite mixture model by EM algorithm and kernel density estimation are 0.225, 0.169, 0.181 and 0.158 respectively.
-```{r rmse_cons, echo=FALSE}
-library(Metrics)
-n1 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[1]]$cpred*8983)
-n2 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[2]]$cpred*8983)
-n3 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[3]]$cpred*8983)
-n4 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[4]]$cpred*8983)
-n5 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[5]]$cpred*8983)
-n6 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[6]]$cpred*8983)
-n7 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[7]]$cpred*8983)
-n8 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[8]]$cpred*8983)
-n9 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[9]]$cpred*8983)
-n10 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[10]]$cpred*8983)
-n11 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[11]]$cpred*8983)
-n12 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[12]]$cpred*8983)
-k1 <- rmsle(flex_mean_p1[[1]]$true*8983, flex_mean_p7[[1]]$kde*8983)
-c1 <- rmsle(cons_mean[[1]]$true*8983, clt_mean*8983)
-crmse <- round(c(n1, n2, n3, n4, n5,n6, n7,n8, n9, n10, n11, n12),3)
 
-n1 <- rmsle(flex_mean_p1[[1]]$true*8983, flex_mean_p1[[1]]$cpred*8983)
-n2 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p2[[1]]$cpred*8983)
-n3 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p3[[1]]$cpred*8983)
-n4 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p4[[1]]$cpred*8983)
-n5 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p5[[1]]$cpred*8983)
-n6 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p6[[1]]$cpred*8983)
-n7 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p7[[1]]$cpred*8983)
-n8 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p8[[1]]$cpred*8983)
-n9 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p9[[1]]$cpred*8983)
-n10 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p10[[1]]$cpred*8983)
-n11 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p11[[1]]$cpred*8983)
-n12 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p12[[1]]$cpred*8983)
-k1 <- rmsle(flex_mean_p1[[1]]$true*8983, flex_mean_p7[[1]]$kde*8983)
-c1 <- rmsle(flex_mean_p1[[1]]$true*8983, clt_mean*8983)
-f1 <- rmsle(flex_mean_p1[[1]]$true*8983, fmm_mean*8983)
-b1 <- rmsle(flex_mean_p1[[1]]$true*8983, bs_mean*8983)
-frmse <- round(c(n1, n2, n3, n4, n5,n6, n7,n8, n9, n10, n11, n12),3)
-df <- data.frame(constrained  = crmse, flexible = frmse)
-kable(df, "latex", caption = "RMSLE table for bayesian mixture model.") %>%
-  kable_styling(latex_options = c("HOLD_position"))
-```
+\begin{table}[H]
+\centering
+\begin{tabular}{ |c|c|c| } 
+ \hline
+ parameter (within parenthesis are those in TB prior) & NG & TB \\ 
+ \hline
+ $v_0 = 2.13, ss_0=0.6,g_1=1,g_2=4,c=3,d=0.35,(df=3,v_1=1.5)$ & 0.191 & 0.186 \\ 
+ $v_0 = 2.13, ss_0=0.6,g_1=1,g_2=4,c=11,d=1,(df=3,v_1=1.5)$ & 0.193 & 0.185 \\
+ $v_0 = 2.13, ss_0=0.6,g_1=0.5,g_2=2,c=3,d=0.35,(df=3,v_1=1.5)$ & 0.195 & 0.183 \\
+ $v_0 = 2.13, ss_0=0.6,g_1=0.5,g_2=2,c=11,d=1,(df=3,v_1=1.5)$ & 0.192 & 0.186 \\
+ $v_0 = 4, ss_0=1.75,g_1=1,g_2=4,c=3,d=0.35,(df=3,v_1=1.5)$ & 0.192 & 0.189 \\
+ $v_0 = 4, ss_0=1.75,g_1=1,g_2=4,c=11,d=1,(df=3,v_1=1.5)$ & 0.193 & 0.187 \\
+ $v_0 = 4, ss_0=1.75,g_1=0.5,g_2=2,c=3,d=0.35,(df=3,v_1=1.5)$ & 0.195 & 0.185\\
+ $v_0 = 4, ss_0=1.75,g_1=0.5,g_2=2,c=11,d=1,(df=3,v_1=1.5)$ & 0.191 & 0.186\\
+ $v_0 = 10, ss_0=6.2,g_1=1,g_2=4,c=3,d=0.35,(df=3,v_1=1.5)$ & 0.192 & 0.191\\
+ $v_0 = 10, ss_0=6.2,g_1=1,g_2=4,c=11,d=1,(df=3,v_1=1.5)$ & 0.195 & 0.188 \\
+ $v_0 = 10, ss_0=6.2,g_1=0.5,g_2=2,c=3,d=0.35,(df=3,v_1=1.5)$ & 0.191 & 0.192\\
+ $v_0 = 10, ss_0=6.2,g_1=0.5,g_2=2,c=11,d=1,(df=3,v_1=1.5)$ & 0.194 & 0.190\\ 
+ \hline
+\end{tabular}
+\caption{RMSLE table for bayesian mixture model.}
+\end{table}
+
+
+<!-- ```{r rmse_cons, echo=FALSE} -->
+<!-- library(Metrics) -->
+<!-- n1 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[1]]$cpred*8983) -->
+<!-- n2 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[2]]$cpred*8983) -->
+<!-- n3 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[3]]$cpred*8983) -->
+<!-- n4 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[4]]$cpred*8983) -->
+<!-- n5 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[5]]$cpred*8983) -->
+<!-- n6 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[6]]$cpred*8983) -->
+<!-- n7 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[7]]$cpred*8983) -->
+<!-- n8 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[8]]$cpred*8983) -->
+<!-- n9 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[9]]$cpred*8983) -->
+<!-- n10 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[10]]$cpred*8983) -->
+<!-- n11 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[11]]$cpred*8983) -->
+<!-- n12 <- rmsle(flex_mean_p1[[1]]$true*8983, cons_mean[[12]]$cpred*8983) -->
+<!-- k1 <- rmsle(flex_mean_p1[[1]]$true*8983, flex_mean_p7[[1]]$kde*8983) -->
+<!-- c1 <- rmsle(cons_mean[[1]]$true*8983, clt_mean*8983) -->
+<!-- crmse <- round(c(n1, n2, n3, n4, n5,n6, n7,n8, n9, n10, n11, n12),3) -->
+
+<!-- n1 <- rmsle(flex_mean_p1[[1]]$true*8983, flex_mean_p1[[1]]$cpred*8983) -->
+<!-- n2 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p2[[1]]$cpred*8983) -->
+<!-- n3 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p3[[1]]$cpred*8983) -->
+<!-- n4 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p4[[1]]$cpred*8983) -->
+<!-- n5 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p5[[1]]$cpred*8983) -->
+<!-- n6 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p6[[1]]$cpred*8983) -->
+<!-- n7 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p7[[1]]$cpred*8983) -->
+<!-- n8 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p8[[1]]$cpred*8983) -->
+<!-- n9 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p9[[1]]$cpred*8983) -->
+<!-- n10 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p10[[1]]$cpred*8983) -->
+<!-- n11 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p11[[1]]$cpred*8983) -->
+<!-- n12 <- rmsle(flex_mean_p2[[1]]$true*8983, flex_mean_p12[[1]]$cpred*8983) -->
+<!-- k1 <- rmsle(flex_mean_p1[[1]]$true*8983, flex_mean_p7[[1]]$kde*8983) -->
+<!-- c1 <- rmsle(flex_mean_p1[[1]]$true*8983, clt_mean*8983) -->
+<!-- f1 <- rmsle(flex_mean_p1[[1]]$true*8983, fmm_mean*8983) -->
+<!-- b1 <- rmsle(flex_mean_p1[[1]]$true*8983, bs_mean*8983) -->
+<!-- frmse <- round(c(n1, n2, n3, n4, n5,n6, n7,n8, n9, n10, n11, n12),3) -->
+<!-- df <- data.frame(constrained  = crmse, flexible = frmse) -->
+<!-- kable(df, "latex", caption = "RMSLE table for bayesian mixture model.") %>% -->
+<!--   kable_styling(latex_options = c("HOLD_position")) -->
+<!-- ``` -->
 
 From the RMSLE table, we see that mixture model with a flexible prior generally has lower prediction error. Whatever priors we specify, the bayesian mixture model beats the bootstrapping and at the same time, often has bigger prediction error compared to the other method.
 
