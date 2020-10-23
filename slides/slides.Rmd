@@ -1,6 +1,6 @@
 ---
 title: "Distribution Fitting and Predictions"
-subtitle: "on Heavy Tailed Data in Audit using nonparametric bayes"
+subtitle: "on Heavy Tailed Data in Audit using Nonparametric Bayes"
 author: Andy Zhai
 output: 
   beamer_presentation:
@@ -133,7 +133,7 @@ Recall: $X$ true value, $Y$ claimed value.
 
 ### The auditor's work
 
-* Once the auditor has the model of $P(X)$ and $P(Y|X)$, and given a set of claimed values $(y_1,y_2,...,y_n)$ ($X$ is not observable to the auditor), he or she can use $(y_1,y_2,...,y_n)$ along with $P(X|Y)$ to update the opinion about true values $X$ and then make inference on the error.
+* Once the auditor has the model of $P(X)$ and $P(Y|X)$, and given a set of claimed values $(y_1,y_2,...,y_n)$, he or she can use $(y_1,y_2,...,y_n)$ along with $P(X|Y)$ to update the opinion about true values $X$ and then make inference on the error.
 
 <!-- ```{r diag} -->
 <!-- DiagrammeR::grViz(" -->
@@ -184,7 +184,7 @@ Recall: $X$ true value, $Y$ claimed value.
 * Model the true value $X$ by a bayesian approach.
 
   * $\lambda$: a vector of parameters.
-  * $P(X|\lambda)$: a statistical model for data.
+  * $P(X|\lambda)$: a statistical model for true value $X$.
   * $\sum X$: inferencial target.
 
 <!-- ```{r diag2} -->
@@ -212,7 +212,7 @@ Recall: $X$ true value, $Y$ claimed value.
 
 \vspace{3pt}
 
-* Derive posterior$P(\lambda|X)$;
+* Derive posterior $P(\lambda|X)$;
 
 \vspace{3pt}
 
@@ -222,7 +222,7 @@ Recall: $X$ true value, $Y$ claimed value.
 
 \vspace{3pt}
 
-* check prediction performance.
+* Check prediction performance.
 
   
 ## Challenge in Modelling the Audit Data
@@ -371,7 +371,7 @@ $$f(z| \mathbf{\pi}, \mathbf{\theta}) = \sum_{i = 1}^{m} \pi_{i} N(z|\theta_{i})
 
 ## Determine $P$(\boldmath$\theta$ | \boldmath$\pi$)
 
-* Laten variable \boldmath$K$; each $k_i \in \{1,...,N\}$ indexes a component in the mixture model,
+* Laten variable \boldmath$K$; each $k_i \in \{1,...,m\}$ indexes a component in the mixture model,
 $$Z_i | \theta, K \stackrel{ind}{\sim} N(\theta_{k_i}), \quad where \ \theta_{K_i} = (\mu_{k_i}, \sigma_{k_i}^2 =\phi_{k_i}^{-1})$$
 
 ### Two Choices of $P$(\boldmath$\theta$ | \boldmath$\pi$)
@@ -422,7 +422,7 @@ T-betaprime (flexible) prior:
 
 \begin{figure}
   \centering
-  \includegraphics[scale = 0.4]{table_screenshot.png}
+  \includegraphics[scale = 0.2]{table_screenshot.jpg}
   \\
 \end{figure}
 
@@ -704,6 +704,7 @@ $$RMSLE = \sqrt{\dfrac{\sum_{i =1}^{n}(log(pred^{(i)}) - log(true^{(i)}))^2}{n}}
 
 * By truncation, we can fix the extrapolation problem. In terms of point estimates of $\sum \tilde{X}$, our method mimics the behavior of using lognormal KDE, finite mixture of lognormals, and sample sum. But our method maintains the merit of being integrated into a bigger bayesian hierarchy. 
 
+Codes available at https://github.com/HongxuanZhai/DataAnalysisProject.git
 
 ## Backup
   
